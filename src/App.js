@@ -15,7 +15,7 @@ const COURSE=[
 ];
 const HCP_ORDER=[...COURSE].sort((a,b)=>a.hcp-b.hcp).map(h=>h.hole);
 const FLIGHT_NAMES=["A","B","C","D","E"];
-const FLIGHT_SIZES=[7,7,7,7,8];
+const FLIGHT_SIZES=[6,6,6,6,7];
 const PAYOUTS={1:400,2:200,3:100};
 const SKINS_POT=400;
 const ADMIN_CODES=["ANDYQ26","STAFF001","STAFF002"];
@@ -42,18 +42,37 @@ function newTeam(name,idx){const id=`T${UID++}`;sset(SK_UID,UID);return{id,name,
 function generateTestScores(seed){const scores={};let rng=seed*1103515245+12345;COURSE.forEach(({hole,par})=>{rng=(rng*1103515245+12345)&0x7fffffff;const roll=rng%100;let s=roll<5?par-2:roll<35?par-1:roll<65?par:roll<85?par+1:par+2;scores[hole]=Math.max(1,s);});return scores;}
 
 const ROSTER=[
-  {name:"Matt Simpson",code:"MSI01"},{name:"Scott Mandziara",code:"SMA02"},{name:"Jackson Fuller",code:"JFU03"},
-  {name:"Mark Reichert",code:"MRE04"},{name:"Tim Lowery",code:"TLO05"},{name:"Chris Loness",code:"CLO06"},
-  {name:"Tom Byrd",code:"TBY07"},{name:"Austin Holtgrieve",code:"AHO08"},{name:"Zach Guenther",code:"ZGU09"},
-  {name:"Matt Hacker",code:"MHA10"},{name:"Daniel Weissenborn",code:"DWE11"},{name:"Erika Martin",code:"EMA12"},
-  {name:"Shelby Tierney",code:"STI13"},{name:"David Lowery",code:"DLO14"},{name:"Wendy LaRose",code:"WLA15"},
-  {name:"Dave Koenig",code:"DKO16"},{name:"Gary Steensgard",code:"GST17"},{name:"Ann Ross",code:"ARO18"},
-  {name:"Mitch Miller",code:"MMI19"},{name:"Alec Picinich",code:"API20"},{name:"Dan Fitzgerald",code:"DFI21"},
-  {name:"Adam Glassl",code:"AGL22"},{name:"Steve Wade",code:"SWA23"},{name:"Austin Alvarez",code:"AAL24"},
-  {name:"Drew Quinones",code:"DREWQ"},{name:"Anna Maurer",code:"AMA26"},{name:"Steve Mohrmann",code:"SMO27"},
-  {name:"Keith Schildroth",code:"KSC28"},{name:"Julie Quinones",code:"JQU29"},{name:"Andrew Eilers",code:"AEI30"},
-  {name:"Kyle Orf",code:"KOR31"},{name:"Randy Boden",code:"RBO32"},{name:"Wes Degener",code:"WDE33"},
-  {name:"Ryan Sosnowski",code:"RSO34"},
+  {name:"Matt Simpson",                code:"MSI01"},
+  {name:"Scott Mandziara",             code:"SMA02"},
+  {name:"Jackson Fuller",              code:"JFU03"},
+  {name:"Mark Reichert",               code:"MRE04"},
+  {name:"Tim Lowery",                  code:"TLO05"},
+  {name:"Chris Loness",                code:"CLO06"},
+  {name:"Austin Holtgrieve",           code:"AHO07"},
+  {name:"Zach Guenther",               code:"ZGU08"},
+  {name:"Matt Hacker",                 code:"MHA09"},
+  {name:"Erika Martin",                code:"EMA10"},
+  {name:"Wendy LaRose",                code:"WLA11"},
+  {name:"David Koenig",                code:"DKO12"},
+  {name:"Gary Steensgard",             code:"GST13"},
+  {name:"Mitch Miller",                code:"MMI14"},
+  {name:"Alec Picinich",               code:"API15"},
+  {name:"Dan Fitzgerald",              code:"DFI16"},
+  {name:"Steve Wade",                  code:"SWA17"},
+  {name:"Austin Alvarez",              code:"AAL18"},
+  {name:"Drew Quinones",               code:"DREWQ"},
+  {name:"Anna Maurer",                 code:"AMA20"},
+  {name:"Steve Mohrmann",              code:"SMO21"},
+  {name:"Julie Quinones",              code:"JQU22"},
+  {name:"Welfare Association - Boden", code:"WAB23"},
+  {name:"Wes Degener",                 code:"WDE24"},
+  {name:"Ryan Sosnowski",              code:"RSO25"},
+  {name:"Jared Brandt",                code:"JBR26"},
+  {name:"Cody Pingleton",              code:"CPI27"},
+  {name:"Steve Pardo",                 code:"SPA28"},
+  {name:"Keith Schildroth",            code:"KSC29"},
+  {name:"Bryce Beckmann",              code:"BBE30"},
+  {name:"Florissant Police Officers",  code:"FPO31"},
 ];
 function buildDefaultTeams(){return ROSTER.map((r,i)=>({id:`T${i+1}`,name:r.name,code:r.code,scores:{},submitted:false}));}
 
@@ -74,7 +93,6 @@ function ScorePill({score,par}){
   return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:r,background:bg,color,fontWeight:700,fontSize:13,border:d<=-2?`2px solid ${C.gold}`:"none"}}>{score}</span>;
 }
 function Toast({msg,type}){return <div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:type==="error"?C.red:C.greenDark,color:"#fff",padding:"11px 24px",borderRadius:10,fontSize:14,fontWeight:700,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,.5)",whiteSpace:"nowrap"}}>{msg}</div>;}
-// eslint-disable-next-line no-unused-vars
 function LogoBadge({size=44}){return(<svg width={size} height={size} viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="27" fill={C.navy} stroke={C.green} strokeWidth="2"/><circle cx="28" cy="28" r="21" fill={C.white} stroke={C.green} strokeWidth="1.5"/><circle cx="28" cy="28" r="9" fill={C.navy}/>{[[28,21],[28,35],[21,28],[35,28],[23,23],[33,23],[23,33],[33,33]].map(([x,y],i)=><circle key={i} cx={x} cy={y} r="1.2" fill={C.white}/>)}<text x="28" y="51" textAnchor="middle" fill={C.green} fontSize="5.5" fontWeight="700" fontFamily="Georgia,serif">AQ</text></svg>);}
 function Header({sub}){return(<div style={{background:"linear-gradient(180deg,#0a1b30 0%,#0d2340 100%)",borderBottom:"3px solid #3aeb3a",padding:"16px 16px 14px",textAlign:"center"}}><div style={{textAlign:"center",marginBottom:4}}><div style={{fontSize:9,letterSpacing:3,color:C.green,textTransform:"uppercase",fontWeight:700}}>2nd Annual Tournament · Aug 1, 2026</div><div style={{fontSize:20,fontWeight:700,color:C.white,lineHeight:1.2,fontFamily:"Georgia,serif"}}>Andy Quinones Memorial</div><div style={{fontSize:13,color:C.green,fontWeight:700,letterSpacing:.5}}>Golf Tournament</div></div>{sub&&<div style={{fontSize:12,color:C.gray,marginTop:4}}>{sub}</div>}</div>);}
 
@@ -137,6 +155,7 @@ export default function App(){
   function addBulk(){const lines=bulkText.split("\n").map(l=>l.trim()).filter(Boolean);if(!lines.length){showToast("Paste at least one name","error");return;}const existing=new Set(teams.map(t=>t.code));let count=0;const nt=[...teams];lines.forEach(name=>{let code=generateCode(name,nt.length);let a=0;while(existing.has(code)){code=generateCode(name,nt.length+(a++));}existing.add(code);const t=newTeam(name,nt.length);t.code=code;nt.push(t);count++;});setTeams(nt);setBulkText("");setBulkMode(false);showToast(`${count} team${count!==1?"s":""} added ✓`);}
   function saveContest(id){const winner=contestName.trim();if(!winner){showToast("Enter a winner name","error");return;}setContests(prev=>({...prev,[id]:{winner}}));setContestEditing(null);setContestName("");showToast("Contest saved ✓");}
 
+  // ── LOGIN ─────────────────────────────────────────────────────────────────
   if(view==="login")return(
     <div style={{minHeight:"100vh",background:C.navy,color:C.white,fontFamily:"Georgia,serif",paddingBottom:48}}>
       <Header/>
@@ -160,6 +179,7 @@ export default function App(){
     </div>
   );
 
+  // ── PLAYER VIEW ───────────────────────────────────────────────────────────
   if((view==="scoring"||view==="results")&&curTeam){
     const entered=Object.keys(curTeam.scores).length;
     const allIn=entered===18;
@@ -169,7 +189,7 @@ export default function App(){
     const myFlight=flightMap[curTeam.id]?.flight;
     const myFlightRank=flightMap[curTeam.id]?.flightRank;
     const myFT=myFlight?getFlightTeams(myFlight):[];
-    const {tally:myTally}=myFT.length?computeSkins(myFT):{skinWinners:{},tally:{}};
+    const {skinWinners:mySW,tally:myTally}=myFT.length?computeSkins(myFT):{skinWinners:{},tally:{}};
     const myTotalSkins=Object.values(myTally).reduce((a,v)=>a+v,0);
     const mySkinVal=myTotalSkins>0?(SKINS_POT/myTotalSkins):0;
     const medals=[C.gold,C.silver,C.bronze];
@@ -234,7 +254,7 @@ export default function App(){
 
     function ResultsContent(){
       if(!roundEnded)return <LockedScreen label="Results"/>;
-      // skins computed per flight below
+      const {tally:ft}=myFT.length?computeSkins(myFT):{tally:{}};
       return(
         <div style={{padding:"12px 16px 0",paddingBottom:20}}>
           {myFlight&&(<div style={{background:"#0e2a18",border:`2px solid ${C.green}`,borderRadius:12,padding:16,textAlign:"center",marginBottom:14}}>
@@ -297,13 +317,13 @@ export default function App(){
     function FieldContent(){
       if(!allSubmitted)return <LockedScreen label="Field"/>;
       const submitted=teams.filter(t=>t.submitted&&Object.keys(t.scores).length===18);
-      if(!submitted.length)return(<div style={{padding:"48px 32px",textAlign:"center"}}><div style={{fontSize:40,marginBottom:16}}>📊</div><div style={{fontWeight:700,fontSize:17,color:C.white,marginBottom:10}}>No Scorecards Yet</div><div style={{fontSize:13,color:C.gray,lineHeight:1.8}}>Submitted scorecards will appear here.</div></div>);
+      if(!submitted.length)return(<div style={{padding:"48px 32px",textAlign:"center"}}><div style={{fontSize:40,marginBottom:16}}>📊</div><div style={{fontWeight:700,fontSize:17,color:C.white,marginBottom:10}}>No Scorecards Yet</div><div style={{fontSize:13,color:C.gray,lineHeight:1.8}}>Submitted scorecards will appear here so you can see how the field played each hole.</div></div>);
       const sorted=[...submitted].sort((a,b)=>totalScore(a.scores)-totalScore(b.scores));
       function Cell({score,par}){if(!score)return <div style={{width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:C.grayDark}}>—</div>;const d=score-par;let bg=C.grayDark,color="#fff",r="3px";if(d<=-2){bg=C.gold;color="#111";r="50%";}else if(d===-1){bg=C.greenDim;r="50%";}else if(d===0){bg=C.navyLight;}else if(d===1){bg=C.orange;}else{bg=C.red;}return <div style={{width:28,height:28,borderRadius:r,background:bg,color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0,border:d<=-2?`2px solid ${C.gold}`:"none"}}>{score}</div>;}
       return(
         <div style={{paddingBottom:24}}>
           <div style={{padding:"10px 16px 0",display:"flex",gap:8,flexWrap:"wrap"}}>{[[C.gold,"Eagle+","50%"],[C.greenDim,"Birdie","50%"],[C.navyLight,"Par","3px"],[C.orange,"Bogey","3px"],[C.red,"Double+","3px"]].map(([bg,label,r])=>(<div key={label} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:14,height:14,borderRadius:r,background:bg,flexShrink:0}}/><span style={{fontSize:10,color:C.gray}}>{label}</span></div>))}</div>
-          <div style={{fontSize:11,color:C.gray,padding:"6px 16px 8px"}}>{submitted.length} of {teams.length} scorecards submitted</div>
+          <div style={{fontSize:11,color:C.gray,padding:"6px 16px 8px"}}>{submitted.length} of {teams.length} scorecards submitted · sorted by score</div>
           <div style={{overflowX:"auto",paddingBottom:8}}>
             <table style={{borderCollapse:"collapse",minWidth:"100%",fontSize:11}}>
               <thead><tr>
@@ -334,6 +354,7 @@ export default function App(){
     );
   }
 
+  // ── ADMIN VIEW ────────────────────────────────────────────────────────────
   if(view==="admin"){
     const ATABS=["teams","results","skins","contests","settings"];
     const submitted=teams.filter(t=>t.submitted).length;
@@ -456,7 +477,7 @@ export default function App(){
           </div>
           <div style={cardSt}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>Flight Rules</div>
-            {[["Format","All teams ranked by gross score after submission"],["Splits","1–7=A · 8–14=B · 15–21=C · 22–28=D · 29–36=E"],["Tiebreaker","Scorecard playoff from HCP 1 (Hole 2)"],["Places","1st $400 · 2nd $200 · 3rd $100"],["Skins","$400 pot per flight · ties carry over"]].map(([k,v])=>(<div key={k} style={{padding:"7px 0",borderBottom:`1px solid ${C.navyLight}`,fontSize:12}}><div style={{color:C.green,fontWeight:700,marginBottom:2}}>{k}</div><div style={{color:C.gray,lineHeight:1.5}}>{v}</div></div>))}
+            {[["Format","All teams ranked by gross score after submission"],["Splits","1–6=A · 7–12=B · 13–18=C · 19–24=D · 25–31=E"],["Tiebreaker","Scorecard playoff from HCP 1 (Hole 2)"],["Places","1st $400 · 2nd $200 · 3rd $100"],["Skins","$400 pot per flight · ties carry over"]].map(([k,v])=>(<div key={k} style={{padding:"7px 0",borderBottom:`1px solid ${C.navyLight}`,fontSize:12}}><div style={{color:C.green,fontWeight:700,marginBottom:2}}>{k}</div><div style={{color:C.gray,lineHeight:1.5}}>{v}</div></div>))}
           </div>
           <div style={cardSt}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Test Mode</div>
@@ -491,3 +512,4 @@ export default function App(){
 
   return null;
 }
+
