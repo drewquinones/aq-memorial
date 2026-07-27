@@ -93,7 +93,7 @@ function ScorePill({score,par}){
   return <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:r,background:bg,color,fontWeight:700,fontSize:13,border:d<=-2?`2px solid ${C.gold}`:"none"}}>{score}</span>;
 }
 function Toast({msg,type}){return <div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:type==="error"?C.red:C.greenDark,color:"#fff",padding:"11px 24px",borderRadius:10,fontSize:14,fontWeight:700,zIndex:9999,boxShadow:"0 4px 24px rgba(0,0,0,.5)",whiteSpace:"nowrap"}}>{msg}</div>;}
-function LogoBadge({size=44}){return(<svg width={size} height={size} viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="27" fill={C.navy} stroke={C.green} strokeWidth="2"/><circle cx="28" cy="28" r="21" fill={C.white} stroke={C.green} strokeWidth="1.5"/><circle cx="28" cy="28" r="9" fill={C.navy}/>{[[28,21],[28,35],[21,28],[35,28],[23,23],[33,23],[23,33],[33,33]].map(([x,y],i)=><circle key={i} cx={x} cy={y} r="1.2" fill={C.white}/>)}<text x="28" y="51" textAnchor="middle" fill={C.green} fontSize="5.5" fontWeight="700" fontFamily="Georgia,serif">AQ</text></svg>);}
+// LogoBadge removed (unused)
 function Header({sub}){return(<div style={{background:"linear-gradient(180deg,#0a1b30 0%,#0d2340 100%)",borderBottom:"3px solid #3aeb3a",padding:"16px 16px 14px",textAlign:"center"}}><div style={{textAlign:"center",marginBottom:4}}><div style={{fontSize:9,letterSpacing:3,color:C.green,textTransform:"uppercase",fontWeight:700}}>2nd Annual Tournament · Aug 1, 2026</div><div style={{fontSize:20,fontWeight:700,color:C.white,lineHeight:1.2,fontFamily:"Georgia,serif"}}>Andy Quinones Memorial</div><div style={{fontSize:13,color:C.green,fontWeight:700,letterSpacing:.5}}>Golf Tournament</div></div>{sub&&<div style={{fontSize:12,color:C.gray,marginTop:4}}>{sub}</div>}</div>);}
 
 export default function App(){
@@ -189,7 +189,7 @@ export default function App(){
     const myFlight=flightMap[curTeam.id]?.flight;
     const myFlightRank=flightMap[curTeam.id]?.flightRank;
     const myFT=myFlight?getFlightTeams(myFlight):[];
-    const {skinWinners:mySW,tally:myTally}=myFT.length?computeSkins(myFT):{skinWinners:{},tally:{}};
+    const {tally:myTally}=myFT.length?computeSkins(myFT):{skinWinners:{},tally:{}};
     const myTotalSkins=Object.values(myTally).reduce((a,v)=>a+v,0);
     const mySkinVal=myTotalSkins>0?(SKINS_POT/myTotalSkins):0;
     const medals=[C.gold,C.silver,C.bronze];
