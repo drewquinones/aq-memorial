@@ -254,7 +254,6 @@ export default function App(){
 
     function ResultsContent(){
       if(!roundEnded)return <LockedScreen label="Results"/>;
-      const {tally:ft}=myFT.length?computeSkins(myFT):{tally:{}};
       return(
         <div style={{padding:"12px 16px 0",paddingBottom:20}}>
           {myFlight&&(<div style={{background:"#0e2a18",border:`2px solid ${C.green}`,borderRadius:12,padding:16,textAlign:"center",marginBottom:14}}>
