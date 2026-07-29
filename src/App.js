@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue, set, get } from "firebase/database";
+import { getDatabase, ref, onValue, set } from "firebase/database";
 
 // ── Firebase config ───────────────────────────────────────────────────────────
 const firebaseConfig = {
@@ -58,7 +58,7 @@ function rankTeams(teams){const sub=teams.filter(t=>t.submitted&&Object.keys(t.s
 function assignFlights(ranked){const r={};let pos=0;FLIGHT_SIZES.forEach((size,fi)=>{ranked.slice(pos,pos+size).forEach((t,rank)=>{r[t.id]={flight:FLIGHT_NAMES[fi],flightRank:rank+1};});pos+=size;});return r;}
 function computeSkins(ft){const sw={};let carry=0;COURSE.forEach(({hole})=>{const scores=ft.map(t=>({id:t.id,score:t.scores[hole]??99}));const min=Math.min(...scores.map(s=>s.score));const winners=scores.filter(s=>s.score===min);if(winners.length===1){sw[hole]={teamId:winners[0].id,skins:1+carry};carry=0;}else{sw[hole]={teamId:null,carryover:true};carry++;}});const tally={};ft.forEach(t=>{tally[t.id]=0;});Object.values(sw).forEach(({teamId,skins})=>{if(teamId)tally[teamId]=(tally[teamId]||0)+skins;});return{skinWinners:sw,tally};}
 function generateCode(name,idx){const c=name.replace(/[^a-zA-Z0-9]/g,"").toUpperCase();return`${c.substring(0,3)||"TM"}${String(idx+1).padStart(2,"0")}`;}
-function newTeam(name,idx){const id=`T${UID++}`;return{id,name,code:generateCode(name,idx),scores:{},submitted:false};}
+// newTeam removed — teams created inline with Firebase
 function generateTestScores(seed){const scores={};let rng=seed*1103515245+12345;COURSE.forEach(({hole,par})=>{rng=(rng*1103515245+12345)&0x7fffffff;const roll=rng%100;let s=roll<5?par-2:roll<35?par-1:roll<65?par:roll<85?par+1:par+2;scores[hole]=Math.max(1,s);});return scores;}
 
 const ROSTER=[
