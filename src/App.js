@@ -127,23 +127,27 @@ export default function App(){
 
   // ── Sync from Firebase on mount ───────────────────────────────────────────
   useEffect(()=>{
+    let teamsLoaded=false;
     const unsubTeams=dbListen("teams",(val)=>{
       if(val){
         const arr=Object.values(val).map(t=>({...t,scores:t.scores||{}}));
         setTeams(arr);
-      } else {
-        // First load — seed default teams
+      } else if(!teamsLoaded) {
+        // First time — seed default teams
         const defaults=buildDefaultTeams();
         const obj={};
         defaults.forEach(t=>{obj[t.id]=t;});
         dbSet("teams",obj);
         setTeams(defaults);
       }
+      teamsLoaded=true;
       setDbReady(true);
     });
     const unsubRound=dbListen("roundEnded",(val)=>setRound(!!val));
     const unsubContests=dbListen("contests",(val)=>setContests(val||{}));
-    return()=>{unsubTeams();unsubRound();unsubContests();};
+    // Fallback — show app after 5 seconds even if Firebase is slow
+    const timeout=setTimeout(()=>setDbReady(true),5000);
+    return()=>{unsubTeams();unsubRound();unsubContests();clearTimeout(timeout);};
   },[]);
 
   const [codeInput,setCode]=useState("");
@@ -255,7 +259,7 @@ export default function App(){
     <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
       <div style={{fontSize:32}}>⛳</div>
       <div style={{color:C.green,fontFamily:"Georgia,serif",fontSize:16,fontWeight:700}}>Andy Quinones Memorial</div>
-      <div style={{color:C.gray,fontSize:13}}>Loading tournament data...</div>
+      <div style={{color:C.gray,fontSize:13}}>Connecting to tournament...</div>
     </div>
   );
 
