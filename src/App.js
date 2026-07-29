@@ -1,10 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 
-// ── Local storage helpers ─────────────────────────────────────────────────────
-const SK_TEAMS="aqmgt-teams",SK_ROUND="aqmgt-round",SK_CONTESTS="aqmgt-contests",SK_SESSION="aqmgt-session";
+const SK_TEAMS="aqmgt-teams",SK_ROUND="aqmgt-round-ended",SK_UID="aqmgt-uid",SK_CONTESTS="aqmgt-contests",SK_SESSION="aqmgt-session";
 function sget(key,fallback){try{const r=localStorage.getItem(key);return r!==null?JSON.parse(r):fallback;}catch{return fallback;}}
 function sset(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
-let UID=35;
+let UID=Math.max(sget(SK_UID,35),35);
 
 const COURSE=[
   {hole:1,par:4,hcp:17,yards:293},{hole:2,par:4,hcp:1,yards:400},{hole:3,par:5,hcp:5,yards:414},
@@ -39,7 +38,7 @@ function rankTeams(teams){const sub=teams.filter(t=>t.submitted&&Object.keys(t.s
 function assignFlights(ranked){const r={};let pos=0;FLIGHT_SIZES.forEach((size,fi)=>{ranked.slice(pos,pos+size).forEach((t,rank)=>{r[t.id]={flight:FLIGHT_NAMES[fi],flightRank:rank+1};});pos+=size;});return r;}
 function computeSkins(ft){const sw={};let carry=0;COURSE.forEach(({hole})=>{const scores=ft.map(t=>({id:t.id,score:t.scores[hole]??99}));const min=Math.min(...scores.map(s=>s.score));const winners=scores.filter(s=>s.score===min);if(winners.length===1){sw[hole]={teamId:winners[0].id,skins:1+carry};carry=0;}else{sw[hole]={teamId:null,carryover:true};carry++;}});const tally={};ft.forEach(t=>{tally[t.id]=0;});Object.values(sw).forEach(({teamId,skins})=>{if(teamId)tally[teamId]=(tally[teamId]||0)+skins;});return{skinWinners:sw,tally};}
 function generateCode(name,idx){const c=name.replace(/[^a-zA-Z0-9]/g,"").toUpperCase();return`${c.substring(0,3)||"TM"}${String(idx+1).padStart(2,"0")}`;}
-// newTeam removed — teams created inline with Firebase
+function newTeam(name,idx){const id=`T${UID++}`;sset(SK_UID,UID);return{id,name,code:generateCode(name,idx),scores:{},submitted:false};}
 function generateTestScores(seed){const scores={};let rng=seed*1103515245+12345;COURSE.forEach(({hole,par})=>{rng=(rng*1103515245+12345)&0x7fffffff;const roll=rng%100;let s=roll<5?par-2:roll<35?par-1:roll<65?par:roll<85?par+1:par+2;scores[hole]=Math.max(1,s);});return scores;}
 
 const ROSTER=[
@@ -148,17 +147,14 @@ export default function App(){
   }
   function saveScore(hole,val){const s=parseInt(val);if(!s||s<1||s>15){showToast("Enter a score 1–15","error");return;}setTeams(prev=>prev.map(t=>t.id===curId?{...t,scores:{...t.scores,[hole]:s}}:t));setEditHole(null);showToast(`Hole ${hole} saved ✓`);}
   function submitCard(){setTeams(prev=>prev.map(t=>t.id===curId?{...t,submitted:true}:t));sset(SK_SESSION,null);showToast("Scorecard submitted!");setView("login");setCurId(null);setCode("");}
-  function addTeam(){const name=addName.trim();if(!name){showToast("Enter a team name","error");return;}const code=(addCode.trim().toUpperCase()||generateCode(name,teams.length));if(teams.find(t=>t.code===code)){showToast("Code already in use","error");return;}const t={id:`T${UID++}`,name,code,scores:{},submitted:false};setTeams(prev=>[...prev,t]);setAddName("");setAddCode("");setShowAddForm(false);showToast(`${name} added ✓`);}
+  function addTeam(){const name=addName.trim();if(!name){showToast("Enter a team name","error");return;}const code=(addCode.trim().toUpperCase()||generateCode(name,teams.length));if(teams.find(t=>t.code===code)){showToast("Code already in use","error");return;}const t=newTeam(name,teams.length);t.code=code;setTeams(prev=>[...prev,t]);setAddName("");setAddCode("");setShowAddForm(false);showToast(`${name} added ✓`);}
   function saveEditTeam(){const name=editName.trim(),code=editCode.trim().toUpperCase();if(!name||!code){showToast("Name and code required","error");return;}if(teams.find(t=>t.code===code&&t.id!==editingTeamId)){showToast("Code in use","error");return;}setTeams(prev=>prev.map(t=>t.id===editingTeamId?{...t,name,code}:t));setEditingTeamId(null);showToast("Team updated ✓");}
   function deleteTeam(id){setTeams(prev=>prev.filter(t=>t.id!==id));setConfirmDelete(null);showToast("Team removed");}
   function openOverride(team){setOverrideTeamId(team.id);setOverrideScores({...team.scores});setOverrideHole(null);setOverrideVal("");setEditingTeamId(null);setConfirmDelete(null);}
   function saveOverride(){const missing=COURSE.filter(h=>!overrideScores[h.hole]||overrideScores[h.hole]<1);if(missing.length){showToast(`Missing score for Hole ${missing[0].hole}`,"error");return;}setTeams(prev=>prev.map(t=>t.id===overrideTeamId?{...t,scores:overrideScores,submitted:true}:t));setOverrideTeamId(null);showToast("Scores updated ✓");}
-  function addBulk(){const lines=bulkText.split("\n").map(l=>l.trim()).filter(Boolean);if(!lines.length){showToast("Paste at least one name","error");return;}const existing=new Set(teams.map(t=>t.code));let count=0;const nt=[...teams];lines.forEach(name=>{let code=generateCode(name,nt.length);let a=0;while(existing.has(code)){code=generateCode(name,nt.length+(a++));}existing.add(code);const t={id:`T${UID++}`,name,code,scores:{},submitted:false};nt.push(t);count++;});setTeams(nt);setBulkText("");setBulkMode(false);showToast(`${count} team${count!==1?"s":""} added ✓`);}
+  function addBulk(){const lines=bulkText.split("\n").map(l=>l.trim()).filter(Boolean);if(!lines.length){showToast("Paste at least one name","error");return;}const existing=new Set(teams.map(t=>t.code));let count=0;const nt=[...teams];lines.forEach(name=>{let code=generateCode(name,nt.length);let a=0;while(existing.has(code)){code=generateCode(name,nt.length+(a++));}existing.add(code);const t=newTeam(name,nt.length);t.code=code;nt.push(t);count++;});setTeams(nt);setBulkText("");setBulkMode(false);showToast(`${count} team${count!==1?"s":""} added ✓`);}
   function saveContest(id){const winner=contestName.trim();if(!winner){showToast("Enter a winner name","error");return;}setContests(prev=>({...prev,[id]:{winner}}));setContestEditing(null);setContestName("");showToast("Contest saved ✓");}
 
-  function setRoundEnded(val){setRound(val);}
-
-  // ── Loading screen ────────────────────────────────────────────────────────
   // ── LOGIN ─────────────────────────────────────────────────────────────────
   if(view==="login")return(
     <div style={{minHeight:"100vh",background:C.navy,color:C.white,fontFamily:"Georgia,serif",paddingBottom:48}}>
@@ -476,7 +472,7 @@ export default function App(){
             <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Round Status</div>
             <div style={{fontSize:13,color:C.gray,marginBottom:8,lineHeight:1.6}}>{roundEnded?"Round ended. Results visible to players.":"Round active. Results hidden from players."}</div>
             <div style={{fontSize:12,color:C.gray,marginBottom:12}}>{submitted}/{teams.length} scorecards submitted</div>
-            <button style={btn(roundEnded?C.navyLight:"#166534","#fff",0)} onClick={()=>{setRoundEnded(!roundEnded);showToast(roundEnded?"Round reopened.":"Results are now live!");}}>{roundEnded?"↩ Reopen Round":"🏁 End Round & Publish Results"}</button>
+            <button style={btn(roundEnded?C.navyLight:"#166534","#fff",0)} onClick={()=>{setRound(r=>!r);showToast(roundEnded?"Round reopened.":"Results are now live!");}}>{roundEnded?"↩ Reopen Round":"🏁 End Round & Publish Results"}</button>
           </div>
           <div style={cardSt}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>Flight Rules</div>
@@ -490,7 +486,7 @@ export default function App(){
           <div style={cardSt}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Reset Tournament</div>
             <div style={{fontSize:13,color:C.gray,marginBottom:12,lineHeight:1.6}}>Wipes all teams, scores, and results.</div>
-            <button style={btn(C.red,"#fff",0)} onClick={()=>{if(window.confirm("Delete ALL teams and scores?")){const fresh=buildDefaultTeams();setTeams(fresh);setRound(false);setContests({});sset(SK_TEAMS,fresh);sset(SK_ROUND,false);sset(SK_CONTESTS,{});showToast("Tournament data cleared.");}}}>🗑 Clear All Tournament Data</button>
+            <button style={btn(C.red,"#fff",0)} onClick={()=>{if(window.confirm("Delete ALL teams and scores?")){const fresh=buildDefaultTeams();setTeams(fresh);setRound(false);setContests({});sset(SK_TEAMS,fresh);sset(SK_ROUND,false);sset(SK_CONTESTS,{});sset(SK_UID,35);UID=35;showToast("Tournament data cleared.");}}}>🗑 Clear All Tournament Data</button>
             <button style={btn(C.navyLight,"#fff",8)} onClick={()=>{sset(SK_SESSION,null);setView("login");setCode("");}}>← Log Out</button>
           </div>
         </div>
@@ -515,4 +511,3 @@ export default function App(){
 
   return null;
 }
-
