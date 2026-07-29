@@ -1,27 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue, set } from "firebase/database";
 
-// ── Firebase config ───────────────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyD0IjY3Kpn0kr-N-kLwPqGAa8emUJ5BYCk",
-  authDomain: "andy-quinones-tournament.firebaseapp.com",
-  databaseURL: "https://andy-quinones-tournament-default-rtdb.firebaseio.com",
-  projectId: "andy-quinones-tournament",
-  storageBucket: "andy-quinones-tournament.firebasestorage.app",
-  messagingSenderId: "598752223096",
-  appId: "1:598752223096:web:eda06d0ef069cb75b5328d",
-  measurementId: "G-M2L7H4HJXR"
-};
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getDatabase(firebaseApp);
-
-// ── Firebase helpers ──────────────────────────────────────────────────────────
-function dbSet(path, value){ return set(ref(db, path), value); }
-function dbListen(path, callback){ return onValue(ref(db, path), snap=>callback(snap.val())); }
-
-// ── Local session storage only (not synced) ───────────────────────────────────
-const SK_SESSION="aqmgt-session";
+// ── Local storage helpers ─────────────────────────────────────────────────────
+const SK_TEAMS="aqmgt-teams",SK_ROUND="aqmgt-round",SK_CONTESTS="aqmgt-contests",SK_SESSION="aqmgt-session";
 function sget(key,fallback){try{const r=localStorage.getItem(key);return r!==null?JSON.parse(r):fallback;}catch{return fallback;}}
 function sset(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
 let UID=35;
@@ -118,37 +98,14 @@ function Toast({msg,type}){return <div style={{position:"fixed",bottom:28,left:"
 function Header({sub}){return(<div style={{background:"linear-gradient(180deg,#0a1b30 0%,#0d2340 100%)",borderBottom:"3px solid #3aeb3a",padding:"16px 16px 14px",textAlign:"center"}}><div style={{textAlign:"center",marginBottom:4}}><div style={{fontSize:9,letterSpacing:3,color:C.green,textTransform:"uppercase",fontWeight:700}}>2nd Annual Tournament · Aug 1, 2026</div><div style={{fontSize:20,fontWeight:700,color:C.white,lineHeight:1.2,fontFamily:"Georgia,serif"}}>Andy Quinones Memorial</div><div style={{fontSize:13,color:C.green,fontWeight:700,letterSpacing:.5}}>Golf Tournament</div></div>{sub&&<div style={{fontSize:12,color:C.gray,marginTop:4}}>{sub}</div>}</div>);}
 
 export default function App(){
-  const [teams,setTeams]=useState([]);
-  const [roundEnded,setRound]=useState(false);
-  const [contests,setContests]=useState({});
-  const [dbReady,setDbReady]=useState(false);
+  const [teams,setTeams]=useState(()=>{const s=sget(SK_TEAMS,null);return s&&s.length>0?s:buildDefaultTeams();});
+  const [roundEnded,setRound]=useState(()=>sget(SK_ROUND,false));
+  const [contests,setContests]=useState(()=>sget(SK_CONTESTS,{}));
   const [view,setView]=useState(()=>{const s=sget(SK_SESSION,null);if(!s)return"login";return s.type==="admin"?"admin":"scoring";});
   const [curId,setCurId]=useState(()=>{const s=sget(SK_SESSION,null);return s?.type==="player"?s.teamId:null;});
-
-  // ── Sync from Firebase on mount ───────────────────────────────────────────
-  useEffect(()=>{
-    let teamsLoaded=false;
-    const unsubTeams=dbListen("teams",(val)=>{
-      if(val){
-        const arr=Object.values(val).map(t=>({...t,scores:t.scores||{}}));
-        setTeams(arr);
-      } else if(!teamsLoaded) {
-        // First time — seed default teams
-        const defaults=buildDefaultTeams();
-        const obj={};
-        defaults.forEach(t=>{obj[t.id]=t;});
-        dbSet("teams",obj);
-        setTeams(defaults);
-      }
-      teamsLoaded=true;
-      setDbReady(true);
-    });
-    const unsubRound=dbListen("roundEnded",(val)=>setRound(!!val));
-    const unsubContests=dbListen("contests",(val)=>setContests(val||{}));
-    // Fallback — show app after 5 seconds even if Firebase is slow
-    const timeout=setTimeout(()=>setDbReady(true),5000);
-    return()=>{unsubTeams();unsubRound();unsubContests();clearTimeout(timeout);};
-  },[]);
+  useEffect(()=>sset(SK_TEAMS,teams),[teams]);
+  useEffect(()=>sset(SK_ROUND,roundEnded),[roundEnded]);
+  useEffect(()=>sset(SK_CONTESTS,contests),[contests]);
 
   const [codeInput,setCode]=useState("");
   const [loginErr,setLoginErr]=useState("");
@@ -189,80 +146,19 @@ export default function App(){
     if(team){sset(SK_SESSION,{type:"player",teamId:team.id});setCurId(team.id);setView("scoring");setLoginErr("");return;}
     setLoginErr("Invalid code. See tournament staff.");
   }
-  function saveScore(hole,val){
-    const s=parseInt(val);
-    if(!s||s<1||s>15){showToast("Enter a score 1–15","error");return;}
-    const team=teams.find(t=>t.id===curId);
-    const newScores={...team.scores,[hole]:s};
-    dbSet(`teams/${curId}/scores`,newScores);
-    setEditHole(null);showToast(`Hole ${hole} saved ✓`);
-  }
-  function submitCard(){
-    dbSet(`teams/${curId}/submitted`,true);
-    sset(SK_SESSION,null);showToast("Scorecard submitted!");
-    setView("login");setCurId(null);setCode("");
-  }
-  function addTeam(){
-    const name=addName.trim();if(!name){showToast("Enter a team name","error");return;}
-    const code=(addCode.trim().toUpperCase()||generateCode(name,teams.length));
-    if(teams.find(t=>t.code===code)){showToast("Code already in use","error");return;}
-    const t={id:`T${UID++}`,name,code,scores:{},submitted:false};
-    dbSet(`teams/${t.id}`,t);
-    setAddName("");setAddCode("");setShowAddForm(false);showToast(`${name} added ✓`);
-  }
-  function saveEditTeam(){
-    const name=editName.trim(),code=editCode.trim().toUpperCase();
-    if(!name||!code){showToast("Name and code required","error");return;}
-    if(teams.find(t=>t.code===code&&t.id!==editingTeamId)){showToast("Code in use","error");return;}
-    dbSet(`teams/${editingTeamId}/name`,name);
-    dbSet(`teams/${editingTeamId}/code`,code);
-    setEditingTeamId(null);showToast("Team updated ✓");
-  }
-  function deleteTeam(id){
-    dbSet(`teams/${id}`,null);
-    setConfirmDelete(null);showToast("Team removed");
-  }
+  function saveScore(hole,val){const s=parseInt(val);if(!s||s<1||s>15){showToast("Enter a score 1–15","error");return;}setTeams(prev=>prev.map(t=>t.id===curId?{...t,scores:{...t.scores,[hole]:s}}:t));setEditHole(null);showToast(`Hole ${hole} saved ✓`);}
+  function submitCard(){setTeams(prev=>prev.map(t=>t.id===curId?{...t,submitted:true}:t));sset(SK_SESSION,null);showToast("Scorecard submitted!");setView("login");setCurId(null);setCode("");}
+  function addTeam(){const name=addName.trim();if(!name){showToast("Enter a team name","error");return;}const code=(addCode.trim().toUpperCase()||generateCode(name,teams.length));if(teams.find(t=>t.code===code)){showToast("Code already in use","error");return;}const t={id:`T${UID++}`,name,code,scores:{},submitted:false};setTeams(prev=>[...prev,t]);setAddName("");setAddCode("");setShowAddForm(false);showToast(`${name} added ✓`);}
+  function saveEditTeam(){const name=editName.trim(),code=editCode.trim().toUpperCase();if(!name||!code){showToast("Name and code required","error");return;}if(teams.find(t=>t.code===code&&t.id!==editingTeamId)){showToast("Code in use","error");return;}setTeams(prev=>prev.map(t=>t.id===editingTeamId?{...t,name,code}:t));setEditingTeamId(null);showToast("Team updated ✓");}
+  function deleteTeam(id){setTeams(prev=>prev.filter(t=>t.id!==id));setConfirmDelete(null);showToast("Team removed");}
   function openOverride(team){setOverrideTeamId(team.id);setOverrideScores({...team.scores});setOverrideHole(null);setOverrideVal("");setEditingTeamId(null);setConfirmDelete(null);}
-  function saveOverride(){
-    const missing=COURSE.filter(h=>!overrideScores[h.hole]||overrideScores[h.hole]<1);
-    if(missing.length){showToast(`Missing score for Hole ${missing[0].hole}`,"error");return;}
-    dbSet(`teams/${overrideTeamId}/scores`,overrideScores);
-    dbSet(`teams/${overrideTeamId}/submitted`,true);
-    setOverrideTeamId(null);showToast("Scores updated ✓");
-  }
-  function addBulk(){
-    const lines=bulkText.split("\n").map(l=>l.trim()).filter(Boolean);
-    if(!lines.length){showToast("Paste at least one name","error");return;}
-    const existing=new Set(teams.map(t=>t.code));let count=0;
-    lines.forEach(name=>{
-      let code=generateCode(name,teams.length+count);let a=0;
-      while(existing.has(code)){code=generateCode(name,teams.length+count+(a++));}
-      existing.add(code);
-      const t={id:`T${UID++}`,name,code,scores:{},submitted:false};
-      dbSet(`teams/${t.id}`,t);count++;
-    });
-    setBulkText("");setBulkMode(false);showToast(`${count} team${count!==1?"s":""} added ✓`);
-  }
-  function saveContest(id){
-    const winner=contestName.trim();if(!winner){showToast("Enter a winner name","error");return;}
-    dbSet(`contests/${id}`,{winner});
-    setContestEditing(null);setContestName("");showToast("Contest saved ✓");
-  }
+  function saveOverride(){const missing=COURSE.filter(h=>!overrideScores[h.hole]||overrideScores[h.hole]<1);if(missing.length){showToast(`Missing score for Hole ${missing[0].hole}`,"error");return;}setTeams(prev=>prev.map(t=>t.id===overrideTeamId?{...t,scores:overrideScores,submitted:true}:t));setOverrideTeamId(null);showToast("Scores updated ✓");}
+  function addBulk(){const lines=bulkText.split("\n").map(l=>l.trim()).filter(Boolean);if(!lines.length){showToast("Paste at least one name","error");return;}const existing=new Set(teams.map(t=>t.code));let count=0;const nt=[...teams];lines.forEach(name=>{let code=generateCode(name,nt.length);let a=0;while(existing.has(code)){code=generateCode(name,nt.length+(a++));}existing.add(code);const t={id:`T${UID++}`,name,code,scores:{},submitted:false};nt.push(t);count++;});setTeams(nt);setBulkText("");setBulkMode(false);showToast(`${count} team${count!==1?"s":""} added ✓`);}
+  function saveContest(id){const winner=contestName.trim();if(!winner){showToast("Enter a winner name","error");return;}setContests(prev=>({...prev,[id]:{winner}}));setContestEditing(null);setContestName("");showToast("Contest saved ✓");}
 
-  function setRoundEnded(val){
-    setRound(val);
-    dbSet("roundEnded",val);
-  }
+  function setRoundEnded(val){setRound(val);}
 
   // ── Loading screen ────────────────────────────────────────────────────────
-  if(!dbReady) return(
-    <div style={{minHeight:"100vh",background:C.navy,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
-      <div style={{fontSize:32}}>⛳</div>
-      <div style={{color:C.green,fontFamily:"Georgia,serif",fontSize:16,fontWeight:700}}>Andy Quinones Memorial</div>
-      <div style={{color:C.gray,fontSize:13}}>Connecting to tournament...</div>
-    </div>
-  );
-
   // ── LOGIN ─────────────────────────────────────────────────────────────────
   if(view==="login")return(
     <div style={{minHeight:"100vh",background:C.navy,color:C.white,fontFamily:"Georgia,serif",paddingBottom:48}}>
@@ -562,7 +458,7 @@ export default function App(){
               <div style={{padding:"12px 14px",background:result?"#0e2a18":C.navyMid,borderBottom:isEditing?`1px solid ${C.navyLight}`:"none"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div><div style={{fontWeight:700,fontSize:14}}>{icon} {label}</div><div style={{fontSize:10,color:C.gray,marginTop:2}}>{note}</div></div>
-                  {!isEditing&&(<div style={{display:"flex",gap:6}}><button onClick={()=>{setContestEditing(id);setContestName(result?.winner||"");}} style={{background:result?C.navyLight:C.greenDark,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>{result?"Edit":"Enter"}</button>{result&&<button onClick={()=>{dbSet(`contests/${id}`,null);showToast("Contest cleared");}} style={{background:"#3b1010",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:12}}>✕</button>}</div>)}
+                  {!isEditing&&(<div style={{display:"flex",gap:6}}><button onClick={()=>{setContestEditing(id);setContestName(result?.winner||"");}} style={{background:result?C.navyLight:C.greenDark,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>{result?"Edit":"Enter"}</button>{result&&<button onClick={()=>{setContests(prev=>{const n={...prev};delete n[id];return n;});showToast("Contest cleared");}} style={{background:"#3b1010",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:12}}>✕</button>}</div>)}
                 </div>
                 {result&&!isEditing&&<div style={{marginTop:8,background:"#0a1b30",borderRadius:7,padding:"8px 12px",border:`1px solid ${C.greenDark}`}}><div style={{fontWeight:700,color:C.green,fontSize:14}}>🏆 {result.winner}</div></div>}
               </div>
@@ -589,19 +485,12 @@ export default function App(){
           <div style={cardSt}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Test Mode</div>
             <div style={{fontSize:13,color:C.gray,marginBottom:12,lineHeight:1.6}}>Fill all teams with random scores and end the round to preview results.</div>
-            <button style={btn("#1a3a6a","#fff",0)} onClick={()=>{
-              const obj={};
-              teams.forEach((t,i)=>{obj[t.id]={...t,scores:generateTestScores(i+1),submitted:true};});
-              dbSet("teams",obj);
-              dbSet("roundEnded",true);
-              dbSet("contests",{ld:{winner:"Matt Simpson"},ctp4:{winner:"Drew Quinones"},ctp8:{winner:"Kyle Orf"},ctp13:{winner:"Erika Martin"},ctp15:{winner:"Julie Quinones"},c2h9:{winner:"Scott Mandziara"}});
-              showToast("Test scores loaded ✓");
-            }}>🧪 Load Test Scores</button>
+            <button style={btn("#1a3a6a","#fff",0)} onClick={()=>{const ws=teams.map((t,i)=>({...t,scores:generateTestScores(i+1),submitted:true}));setTeams(ws);setRound(true);setContests({ld:{winner:"Matt Simpson"},ctp4:{winner:"Drew Quinones"},ctp8:{winner:"Kyle Orf"},ctp13:{winner:"Erika Martin"},ctp15:{winner:"Julie Quinones"},c2h9:{winner:"Scott Mandziara"}});showToast("Test scores loaded ✓");}}>🧪 Load Test Scores</button>
           </div>
           <div style={cardSt}>
             <div style={{fontWeight:700,fontSize:15,marginBottom:6}}>Reset Tournament</div>
             <div style={{fontSize:13,color:C.gray,marginBottom:12,lineHeight:1.6}}>Wipes all teams, scores, and results.</div>
-            <button style={btn(C.red,"#fff",0)} onClick={()=>{if(window.confirm("Delete ALL teams and scores?")){const fresh=buildDefaultTeams();const obj={};fresh.forEach(t=>{obj[t.id]=t;});dbSet("teams",obj);dbSet("roundEnded",false);dbSet("contests",null);showToast("Tournament data cleared.");}}}>🗑 Clear All Tournament Data</button>
+            <button style={btn(C.red,"#fff",0)} onClick={()=>{if(window.confirm("Delete ALL teams and scores?")){const fresh=buildDefaultTeams();setTeams(fresh);setRound(false);setContests({});sset(SK_TEAMS,fresh);sset(SK_ROUND,false);sset(SK_CONTESTS,{});showToast("Tournament data cleared.");}}}>🗑 Clear All Tournament Data</button>
             <button style={btn(C.navyLight,"#fff",8)} onClick={()=>{sset(SK_SESSION,null);setView("login");setCode("");}}>← Log Out</button>
           </div>
         </div>
