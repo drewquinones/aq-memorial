@@ -1,24 +1,711 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#0d2340" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="AQ Memorial" />
-    <meta name="description" content="Andy Quinones Memorial Golf Tournament" />
-    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>AQ Memorial Golf Tournament</title>
-  </head>
-  <body style="margin:0;background:#0d2340;">
-    <div id="root"></div>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js');
-        });
-      }
-    </script>
-  </body>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="theme-color" content="#0d2340"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>AQ Memorial Golf Tournament</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0d2340;font-family:Georgia,serif;color:#fff;}
+input,button,textarea{font-family:Georgia,serif;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useEffect}=React;
+
+const SK_TEAMS="aqmgt-teams",SK_ROUND="aqmgt-round",SK_CONTESTS="aqmgt-contests",SK_SESSION="aqmgt-session",SK_UID="aqmgt-uid";
+function sget(key,fallback){try{const r=localStorage.getItem(key);return r!==null?JSON.parse(r):fallback;}catch{return fallback;}}
+function sset(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
+let UID=Math.max(sget(SK_UID,35),35);
+
+const COURSE=[
+  {hole:1,par:4,hcp:17,yards:293},{hole:2,par:4,hcp:1,yards:400},{hole:3,par:5,hcp:5,yards:414},
+  {hole:4,par:3,hcp:7,yards:190},{hole:5,par:4,hcp:11,yards:328},{hole:6,par:4,hcp:15,yards:298},
+  {hole:7,par:4,hcp:9,yards:370},{hole:8,par:3,hcp:13,yards:160},{hole:9,par:4,hcp:3,yards:392},
+  {hole:10,par:4,hcp:10,yards:358},{hole:11,par:4,hcp:18,yards:292},{hole:12,par:5,hcp:4,yards:500},
+  {hole:13,par:3,hcp:14,yards:143},{hole:14,par:5,hcp:8,yards:480},{hole:15,par:3,hcp:16,yards:148},
+  {hole:16,par:5,hcp:6,yards:491},{hole:17,par:4,hcp:2,yards:422},{hole:18,par:4,hcp:12,yards:311},
+];
+const HCP_ORDER=[...COURSE].sort((a,b)=>a.hcp-b.hcp).map(h=>h.hole);
+const FLIGHT_NAMES=["A","B","C","D","E"];
+const FLIGHT_SIZES=[6,6,6,6,7];
+const PAYOUTS={1:400,2:200,3:100};
+const SKINS_POT=400;
+const ADMIN_CODES=["ANDYQ26","STAFF001","STAFF002"];
+const PRIZE_HOLES={2:"Longest Drive",4:"Closest to Pin",8:"Closest to Pin",9:"Closest 2nd Shot",13:"Closest to Pin",15:"Closest to Pin"};
+const CONTESTS=[
+  {id:"ld",label:"Longest Drive",icon:"X",note:"Hole 2 - Par 4 - 400 yards"},
+  {id:"ctp4",label:"Closest to Pin - Hole 4",icon:"P",note:"Hole 4 - Par 3 - 190 yards"},
+  {id:"ctp8",label:"Closest to Pin - Hole 8",icon:"P",note:"Hole 8 - Par 3 - 160 yards"},
+  {id:"ctp13",label:"Closest to Pin - Hole 13",icon:"P",note:"Hole 13 - Par 3 - 143 yards"},
+  {id:"ctp15",label:"Closest to Pin - Hole 15",icon:"P",note:"Hole 15 - Par 3 - 148 yards"},
+  {id:"c2h9",label:"Closest 2nd Shot - Hole 9",icon:"T",note:"Hole 9 - Par 4 - 392 yards"},
+];
+const C={navy:"#0d2340",navyMid:"#162d4a",navyLight:"#1e3a5f",green:"#3aeb3a",greenDim:"#2ab82a",greenDark:"#1a7a1a",white:"#ffffff",offWhite:"#e8f0e8",gray:"#8faab0",grayDark:"#4a6070",gold:"#d4af37",red:"#b91c1c",orange:"#c2410c"};
+
+const totalScore=s=>Object.values(s).reduce((a,v)=>a+(v||0),0);
+function relToPar(s){const t=totalScore(s);if(!t)return"--";const played=Object.keys(s).map(Number);const par=played.reduce((a,h)=>a+COURSE[h-1].par,0);const d=t-par;return d===0?"E":d>0?"+"+d:""+d;}
+function scoreLabel(score,par){if(!score)return"";const d=score-par;if(d<=-2)return score+" (Eagle)";if(d===-1)return score+" (Birdie)";if(d===0)return score+" (Par)";if(d===1)return score+" (Bogey)";return score+" (Double+)";}
+function scorecardPlayoff(a,b){for(const h of HCP_ORDER){const sa=a.scores[h]||99,sb=b.scores[h]||99;if(sa<sb)return 1;if(sb<sa)return -1;}return 0;}
+function rankTeams(teams){const sub=teams.filter(t=>t.submitted&&Object.keys(t.scores).length===18);return [...sub].sort((a,b)=>{const sa=totalScore(a.scores),sb=totalScore(b.scores);if(sa!==sb)return sa-sb;return -scorecardPlayoff(a,b);});}
+function assignFlights(ranked){const r={};let pos=0;FLIGHT_SIZES.forEach((size,fi)=>{ranked.slice(pos,pos+size).forEach((t,rank)=>{r[t.id]={flight:FLIGHT_NAMES[fi],flightRank:rank+1};});pos+=size;});return r;}
+function computeSkins(ft){const sw={};let carry=0;COURSE.forEach(({hole})=>{const scores=ft.map(t=>({id:t.id,score:t.scores[hole]||99}));const min=Math.min(...scores.map(s=>s.score));const winners=scores.filter(s=>s.score===min);if(winners.length===1){sw[hole]={teamId:winners[0].id,skins:1+carry};carry=0;}else{sw[hole]={teamId:null,carryover:true};carry++;}});const tally={};ft.forEach(t=>{tally[t.id]=0;});Object.values(sw).forEach(({teamId,skins})=>{if(teamId)tally[teamId]=(tally[teamId]||0)+skins;});return{skinWinners:sw,tally};}
+function generateCode(name,idx){const c=name.replace(/[^a-zA-Z0-9]/g,"").toUpperCase();return (c.substring(0,3)||"TM")+String(idx+1).padStart(2,"0");}
+function generateTestScores(seed){const scores={};let rng=seed*1103515245+12345;COURSE.forEach(({hole,par})=>{rng=(rng*1103515245+12345)&0x7fffffff;const roll=rng%100;let s=roll<5?par-2:roll<35?par-1:roll<65?par:roll<85?par+1:par+2;scores[hole]=Math.max(1,s);});return scores;}
+
+const ROSTER=[
+  {name:"Matt Simpson",code:"MSI01"},{name:"Scott Mandziara",code:"SMA02"},{name:"Jackson Fuller",code:"JFU03"},
+  {name:"Mark Reichert",code:"MRE04"},{name:"Tim Lowery",code:"TLO05"},{name:"Chris Loness",code:"CLO06"},
+  {name:"Austin Holtgrieve",code:"AHO07"},{name:"Zach Guenther",code:"ZGU08"},{name:"Matt Hacker",code:"MHA09"},
+  {name:"Erika Martin",code:"EMA10"},{name:"Wendy LaRose",code:"WLA11"},{name:"David Koenig",code:"DKO12"},
+  {name:"Gary Steensgard",code:"GST13"},{name:"Mitch Miller",code:"MMI14"},{name:"Alec Picinich",code:"API15"},
+  {name:"Dan Fitzgerald",code:"DFI16"},{name:"Steve Wade",code:"SWA17"},{name:"Austin Alvarez",code:"AAL18"},
+  {name:"Drew Quinones",code:"DREWQ"},{name:"Anna Maurer",code:"AMA20"},{name:"Steve Mohrmann",code:"SMO21"},
+  {name:"Julie Quinones",code:"JQU22"},{name:"Welfare Association - Boden",code:"WAB23"},{name:"Wes Degener",code:"WDE24"},
+  {name:"Ryan Sosnowski",code:"RSO25"},{name:"Jared Brandt",code:"JBR26"},{name:"Cody Pingleton",code:"CPI27"},
+  {name:"Steve Pardo",code:"SPA28"},{name:"Keith Schildroth",code:"KSC29"},{name:"Bryce Beckmann",code:"BBE30"},
+  {name:"Florissant Police Officers",code:"FPO31"},
+];
+function buildDefaultTeams(){return ROSTER.map((r,i)=>({id:"T"+(i+1),name:r.name,code:r.code,scores:{},submitted:false}));}
+
+const cardSt={background:"#162d4a",border:"1px solid #1e3a5f",borderRadius:12,padding:16,margin:"14px 16px"};
+const inp={background:"#0a1b30",border:"2px solid #1e3a5f",borderRadius:8,color:"#fff",padding:"11px 13px",fontSize:15,width:"100%",outline:"none"};
+const codeInp={...inp,letterSpacing:3,textAlign:"center",fontSize:17,fontFamily:"monospace"};
+const btn=(bg,fg,mt)=>({background:bg||"#1a7a1a",color:fg||"#fff",border:"none",borderRadius:9,padding:"12px 20px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%",marginTop:mt||10});
+
+function ScorePill({score,par}){
+  if(!score)return React.createElement("span",{style:{color:"#4a6070",fontSize:13}},"—");
+  const d=score-par;
+  let bg="#4a6070",color="#fff",r="3px";
+  if(d<=-2){bg=C.gold;color="#111";r="50%";}
+  else if(d===-1){bg=C.greenDim;r="50%";}
+  else if(d===0){bg=C.navyLight;}
+  else if(d===1){bg=C.orange;}
+  else{bg=C.red;}
+  return React.createElement("span",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28,borderRadius:r,background:bg,color,fontWeight:700,fontSize:13}},score);
+}
+
+function Toast({msg,type}){
+  return React.createElement("div",{style:{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:type==="error"?C.red:C.greenDark,color:"#fff",padding:"11px 24px",borderRadius:10,fontSize:14,fontWeight:700,zIndex:9999,whiteSpace:"nowrap"}},msg);
+}
+
+function Header({sub}){
+  return React.createElement("div",{style:{background:"linear-gradient(180deg,#0a1b30 0%,#0d2340 100%)",borderBottom:"3px solid #3aeb3a",padding:"16px 16px 14px",textAlign:"center"}},
+    React.createElement("div",{style:{fontSize:9,letterSpacing:3,color:C.green,textTransform:"uppercase",fontWeight:700}},"2nd Annual Tournament - Aug 1, 2026"),
+    React.createElement("div",{style:{fontSize:20,fontWeight:700,color:C.white,lineHeight:1.2}},"Andy Quinones Memorial"),
+    React.createElement("div",{style:{fontSize:13,color:C.green,fontWeight:700,letterSpacing:.5}},"Golf Tournament"),
+    sub&&React.createElement("div",{style:{fontSize:12,color:C.gray,marginTop:4}},sub)
+  );
+}
+
+function App(){
+  const [teams,setTeams]=useState(()=>{const s=sget(SK_TEAMS,null);return s&&s.length>0?s:buildDefaultTeams();});
+  const [roundEnded,setRound]=useState(()=>sget(SK_ROUND,false));
+  const [contests,setContests]=useState(()=>sget(SK_CONTESTS,{}));
+  const [view,setView]=useState(()=>{const s=sget(SK_SESSION,null);if(!s)return"login";return s.type==="admin"?"admin":"scoring";});
+  const [curId,setCurId]=useState(()=>{const s=sget(SK_SESSION,null);return s&&s.type==="player"?s.teamId:null;});
+  useEffect(()=>sset(SK_TEAMS,teams),[teams]);
+  useEffect(()=>sset(SK_ROUND,roundEnded),[roundEnded]);
+  useEffect(()=>sset(SK_CONTESTS,contests),[contests]);
+
+  const [codeInput,setCode]=useState("");
+  const [loginErr,setLoginErr]=useState("");
+  const [adminTab,setAdminTab]=useState("teams");
+  const [playerTab,setPlayerTab]=useState("scorecard");
+  const [editHole,setEditHole]=useState(null);
+  const [holeVal,setHoleVal]=useState("");
+  const [toast,setToast]=useState(null);
+  const [selFlight,setSelFlight]=useState("A");
+  const [addName,setAddName]=useState("");
+  const [addCode,setAddCode]=useState("");
+  const [editingTeamId,setEditingTeamId]=useState(null);
+  const [editName,setEditName]=useState("");
+  const [editCode,setEditCode]=useState("");
+  const [confirmDelete,setConfirmDelete]=useState(null);
+  const [overrideTeamId,setOverrideTeamId]=useState(null);
+  const [overrideScores,setOverrideScores]=useState({});
+  const [overrideHole,setOverrideHole]=useState(null);
+  const [overrideVal,setOverrideVal]=useState("");
+  const [contestEditing,setContestEditing]=useState(null);
+  const [contestName,setContestName]=useState("");
+
+  const ranked=useMemo(()=>rankTeams(teams),[teams]);
+  const flightMap=useMemo(()=>assignFlights(ranked),[ranked]);
+  const curTeam=teams.find(t=>t.id===curId);
+
+  function showToast(msg,type){setToast({msg,type});setTimeout(()=>setToast(null),2800);}
+  function logout(){sset(SK_SESSION,null);setView("login");setCurId(null);setCode("");}
+  function getFlightTeams(f){return ranked.filter(t=>flightMap[t.id]&&flightMap[t.id].flight===f);}
+
+  function handleLogin(){
+    const code=codeInput.trim().toUpperCase();
+    if(ADMIN_CODES.includes(code)){sset(SK_SESSION,{type:"admin"});setView("admin");setLoginErr("");return;}
+    const team=teams.find(t=>t.code===code);
+    if(team){sset(SK_SESSION,{type:"player",teamId:team.id});setCurId(team.id);setView("scoring");setLoginErr("");return;}
+    setLoginErr("Invalid code. See tournament staff.");
+  }
+
+  function saveScore(hole,val){
+    const s=parseInt(val);
+    if(!s||s<1||s>15){showToast("Enter a score 1-15","error");return;}
+    setTeams(prev=>prev.map(t=>t.id===curId?{...t,scores:{...t.scores,[hole]:s}}:t));
+    setEditHole(null);showToast("Hole "+hole+" saved");
+  }
+
+  function submitCard(){
+    setTeams(prev=>prev.map(t=>t.id===curId?{...t,submitted:true}:t));
+    sset(SK_SESSION,null);showToast("Scorecard submitted!");
+    setView("login");setCurId(null);setCode("");
+  }
+
+  function saveContest(id){
+    const winner=contestName.trim();
+    if(!winner){showToast("Enter a winner name","error");return;}
+    setContests(prev=>({...prev,[id]:{winner}}));
+    setContestEditing(null);setContestName("");showToast("Contest saved");
+  }
+
+  function saveOverride(){
+    const missing=COURSE.filter(h=>!overrideScores[h.hole]||overrideScores[h.hole]<1);
+    if(missing.length){showToast("Missing score for Hole "+missing[0].hole,"error");return;}
+    setTeams(prev=>prev.map(t=>t.id===overrideTeamId?{...t,scores:overrideScores,submitted:true}:t));
+    setOverrideTeamId(null);showToast("Scores updated");
+  }
+
+  // LOGIN
+  if(view==="login"){
+    return React.createElement("div",{style:{minHeight:"100vh",background:C.navy,color:C.white,paddingBottom:48}},
+      React.createElement(Header,null),
+      React.createElement("div",{style:{...cardSt,textAlign:"center"}},
+        React.createElement("div",{style:{fontSize:12,color:C.gray,marginBottom:14,lineHeight:1.8}},"Florissant Golf Club - Florissant, MO\nScramble - Stroke Play - 18 Holes - 5 Flights"),
+        React.createElement("div",{style:{fontSize:12,color:C.gray,marginBottom:10}},"Enter your team code from check-in"),
+        React.createElement("input",{style:codeInp,placeholder:"TEAM CODE",value:codeInput,maxLength:9,onChange:e=>{setCode(e.target.value.toUpperCase());setLoginErr("");},onKeyDown:e=>e.key==="Enter"&&handleLogin()}),
+        loginErr&&React.createElement("div",{style:{color:"#f87171",fontSize:13,marginTop:8}},loginErr),
+        React.createElement("button",{style:btn(),onClick:handleLogin},"Enter Tournament")
+      ),
+      React.createElement("div",{style:{textAlign:"center",padding:"8px 16px",fontSize:11,color:C.grayDark,lineHeight:1.8}},
+        "In memory of Andy Quinones\nPlay with honor - Play with heart"
+      ),
+      toast&&React.createElement(Toast,toast)
+    );
+  }
+
+  // PLAYER VIEW
+  if((view==="scoring"||view==="results")&&curTeam){
+    const entered=Object.keys(curTeam.scores).length;
+    const allIn=entered===18;
+    const allSubmitted=teams.length>0&&teams.every(t=>t.submitted);
+    const myFlight=flightMap[curTeam.id]&&flightMap[curTeam.id].flight;
+    const myFlightRank=flightMap[curTeam.id]&&flightMap[curTeam.id].flightRank;
+    const myFT=myFlight?getFlightTeams(myFlight):[];
+    const {tally:myTally}=myFT.length?computeSkins(myFT):{tally:{}};
+    const myTotalSkins=Object.values(myTally).reduce((a,v)=>a+v,0);
+    const mySkinVal=myTotalSkins>0?(SKINS_POT/myTotalSkins):0;
+    const medals=[C.gold,"#9ca3af","#b87333"];
+    const TABS=[{id:"scorecard",label:"Scorecard"},{id:"results",label:"Results"},{id:"skins",label:"Skins"},{id:"contests",label:"Contests"},{id:"field",label:"Field"}];
+
+    const tabBar=React.createElement("div",{style:{display:"flex",gap:4,padding:"12px 16px 0"}},
+      TABS.map(({id,label})=>{
+        const locked=(id!=="scorecard"&&!roundEnded)||(id==="field"&&!allSubmitted);
+        return React.createElement("button",{key:id,onClick:()=>setPlayerTab(id),style:{flex:1,background:playerTab===id?C.greenDark:C.navyMid,color:playerTab===id?"#fff":locked?C.grayDark:C.gray,border:"none",borderRadius:7,padding:"8px 1px",fontSize:9,fontWeight:playerTab===id?700:400,cursor:"pointer",textAlign:"center",position:"relative"}},
+          label,
+          locked&&React.createElement("div",{style:{position:"absolute",top:2,right:2,fontSize:8}},"🔒")
+        );
+      })
+    );
+
+    function LockedScreen({label}){
+      return React.createElement("div",{style:{padding:"48px 32px",textAlign:"center"}},
+        React.createElement("div",{style:{fontSize:40,marginBottom:16}},"🔒"),
+        React.createElement("div",{style:{fontWeight:700,fontSize:17,color:C.white,marginBottom:10}},label+" Locked"),
+        React.createElement("div",{style:{fontSize:13,color:C.gray,lineHeight:1.8}},"Results will be revealed once all teams submit and the round ends."),
+        React.createElement("div",{style:{fontSize:13,color:C.green,fontWeight:600,marginTop:12}},"Andy is watching - so no cheating!")
+      );
+    }
+
+    function ScorecardTab(){
+      const front9=COURSE.slice(0,9).reduce((a,h)=>a+(curTeam.scores[h.hole]||0),0);
+      const back9=COURSE.slice(9).reduce((a,h)=>a+(curTeam.scores[h.hole]||0),0);
+      const remaining=COURSE.filter(h=>!curTeam.scores[h.hole]);
+
+      return React.createElement("div",{style:{paddingBottom:20}},
+        // Summary
+        React.createElement("div",{style:{display:"flex",gap:6,padding:"12px 16px 0"}},
+          [["Total",totalScore(curTeam.scores)||"—"],["Score",relToPar(curTeam.scores)],["Holes",entered+"/18"]].map(([l,v])=>
+            React.createElement("div",{key:l,style:{flex:1,background:C.navyMid,border:"1px solid "+C.navyLight,borderRadius:9,padding:"9px 4px",textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:20,fontWeight:700,color:C.green}},v),
+              React.createElement("div",{style:{fontSize:9,color:C.gray,textTransform:"uppercase",letterSpacing:1.5}},l)
+            )
+          )
+        ),
+        entered>0&&React.createElement("div",{style:{display:"flex",gap:6,padding:"8px 16px 0"}},
+          [["Front 9",front9||"—"],["Back 9",back9||"—"]].map(([l,v])=>
+            React.createElement("div",{key:l,style:{flex:1,background:"#0a1b30",border:"1px solid "+C.navyLight,borderRadius:7,padding:"6px 4px",textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:15,fontWeight:700,color:C.offWhite}},v),
+              React.createElement("div",{style:{fontSize:9,color:C.gray,textTransform:"uppercase"}},l)
+            )
+          )
+        ),
+        // Progress dots
+        React.createElement("div",{style:{display:"flex",gap:3,padding:"10px 16px 0",flexWrap:"wrap"}},
+          COURSE.map(({hole})=>
+            React.createElement("div",{key:hole,style:{width:14,height:14,borderRadius:3,background:curTeam.scores[hole]?C.greenDim:C.navyLight,border:"1px solid "+(curTeam.scores[hole]?C.green:C.grayDark),cursor:"pointer",flexShrink:0},
+              onClick:()=>{if(!curTeam.submitted){setEditHole(hole);setHoleVal(curTeam.scores[hole]||"");const el=document.getElementById("hole-"+hole);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}}
+            })
+          ),
+          React.createElement("div",{style:{fontSize:10,color:allIn?C.green:C.gray,marginLeft:6,alignSelf:"center",fontWeight:allIn?700:400}},allIn?"All 18 entered":entered+"/18")
+        ),
+        entered>0&&!allIn&&!curTeam.submitted&&React.createElement("div",{style:{margin:"10px 16px 0",background:"#1c1500",border:"1px solid #78350f",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#fbbf24"}},
+          "Still needed: "+remaining.map(h=>"Hole "+h.hole).join(", ")
+        ),
+        React.createElement("div",{style:{margin:"10px 16px 0",display:"flex",alignItems:"center",gap:8,background:"#1a1500",border:"1px solid "+C.gold,borderRadius:8,padding:"8px 12px"}},
+          React.createElement("div",{style:{width:14,height:14,borderRadius:3,border:"2px solid "+C.gold,background:"#1a1500",flexShrink:0}}),
+          React.createElement("div",{style:{fontSize:11,color:C.gold,fontWeight:600}},"Gold border = contest hole with prizes")
+        ),
+        // Holes
+        React.createElement("div",{style:{padding:"12px 16px 0"}},
+          [0,9].map(start=>
+            React.createElement("div",{key:start},
+              React.createElement("div",{style:{fontSize:10,color:C.green,textTransform:"uppercase",letterSpacing:2,fontWeight:700,margin:"10px 0 6px",borderBottom:"1px solid "+C.navyLight,paddingBottom:4}},start===0?"Front 9 (Out)":"Back 9 (In)"),
+              COURSE.slice(start,start+9).map(({hole,par,hcp,yards})=>{
+                const isPrize=!!PRIZE_HOLES[hole],hasScore=!!curTeam.scores[hole];
+                return React.createElement("div",{id:"hole-"+hole,key:hole,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:hasScore?"#0e2a18":isPrize?"#1a1500":C.navy,borderRadius:9,marginBottom:5,border:"2px solid "+(hasScore?C.greenDark:isPrize?C.gold:C.navyLight)}},
+                  React.createElement("div",{style:{minWidth:72}},
+                    React.createElement("div",{style:{fontWeight:700,fontSize:15}},"Hole "+hole),
+                    React.createElement("div",{style:{fontSize:10,color:C.gray}},"Par "+par+" - "+yards+"y - HCP "+hcp),
+                    isPrize&&React.createElement("div",{style:{fontSize:10,color:C.gold,fontWeight:700,marginTop:2}},PRIZE_HOLES[hole])
+                  ),
+                  React.createElement("div",{style:{flex:1,textAlign:"center"}},React.createElement(ScorePill,{score:curTeam.scores[hole],par})),
+                  !curTeam.submitted&&(editHole===hole?
+                    React.createElement("div",{style:{display:"flex",gap:5,alignItems:"center"}},
+                      React.createElement("input",{autoFocus:true,type:"number",min:1,max:15,style:{...inp,width:54,padding:"6px 8px",textAlign:"center",fontSize:16},value:holeVal,onChange:e=>setHoleVal(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveScore(hole,holeVal);if(e.key==="Escape")setEditHole(null);}}),
+                      React.createElement("button",{onClick:()=>saveScore(hole,holeVal),style:{background:C.greenDark,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontWeight:700,fontSize:14}},"✓"),
+                      React.createElement("button",{onClick:()=>setEditHole(null),style:{background:C.navyLight,color:"#fff",border:"none",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:13}},"✕")
+                    ):
+                    React.createElement("button",{onClick:()=>{setEditHole(hole);setHoleVal(curTeam.scores[hole]||"");},style:{background:hasScore?C.navyLight:C.greenDark,color:"#fff",border:"none",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:13,fontWeight:600}},hasScore?"Edit":"Enter")
+                  )
+                );
+              })
+            )
+          )
+        ),
+        // Submit area
+        React.createElement("div",{style:{padding:"14px 16px 0"}},
+          curTeam.submitted&&React.createElement("div",{style:{...cardSt,margin:"0 0 12px",textAlign:"center",background:"#0e2a18",border:"1px solid "+C.greenDark}},
+            React.createElement("div",{style:{fontSize:28,marginBottom:4}},"⛳"),
+            React.createElement("div",{style:{fontWeight:700,color:C.green,fontSize:17}},"Scorecard Submitted"),
+            React.createElement("div",{style:{fontSize:12,color:C.gray,marginTop:6}},"Check the Results tab once the round ends.")
+          ),
+          !curTeam.submitted&&allIn&&React.createElement("div",{style:{background:"#0e2a18",border:"1px solid "+C.green,borderRadius:12,padding:16,marginBottom:12}},
+            React.createElement("div",{style:{fontSize:13,color:C.offWhite,fontWeight:700,marginBottom:4}},"All 18 holes entered"),
+            React.createElement("div",{style:{fontSize:11,color:"#fbbf24",marginBottom:12}},"Scores cannot be changed after submission."),
+            React.createElement("button",{style:btn("#166534","#fff",0),onClick:submitCard},"Submit Final Scorecard")
+          ),
+          !curTeam.submitted&&!allIn&&entered>0&&React.createElement("div",{style:{fontSize:12,color:C.gray,textAlign:"center",padding:"4px 0 12px"}},(18-entered)+" holes remaining"),
+          !curTeam.submitted&&entered===0&&React.createElement("div",{style:{fontSize:12,color:C.gray,textAlign:"center",padding:"4px 0 12px"}},"Tap Enter on any hole to start scoring"),
+          React.createElement("button",{style:btn(C.navyLight,"#fff",0),onClick:logout},"Log Out")
+        )
+      );
+    }
+
+    function ResultsTab(){
+      if(!roundEnded)return React.createElement(LockedScreen,{label:"Results"});
+      return React.createElement("div",{style:{padding:"12px 16px 0",paddingBottom:20}},
+        myFlight&&React.createElement("div",{style:{background:"#0e2a18",border:"2px solid "+C.green,borderRadius:12,padding:16,textAlign:"center",marginBottom:14}},
+          React.createElement("div",{style:{fontSize:10,color:C.green,textTransform:"uppercase",letterSpacing:2,marginBottom:6}},"Your Result"),
+          React.createElement("div",{style:{fontSize:20,fontWeight:700,color:C.white,marginBottom:2}},curTeam.name),
+          React.createElement("div",{style:{fontSize:13,color:C.gray,marginBottom:12}},"Flight "+myFlight+" - Score "+totalScore(curTeam.scores)+" ("+relToPar(curTeam.scores)+")"),
+          React.createElement("div",{style:{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}},
+            React.createElement("div",{style:{background:myFlightRank<=3?medals[myFlightRank-1]:C.navyLight,borderRadius:8,padding:"8px 16px",minWidth:72,textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:22,fontWeight:700,color:myFlightRank===1?"#111":"#fff"}},myFlightRank<=3?["1st","2nd","3rd"][myFlightRank-1]:"#"+myFlightRank),
+              React.createElement("div",{style:{fontSize:10,color:myFlightRank===1?"#333":C.gray,marginTop:2}},"Flight "+myFlight)
+            ),
+            PAYOUTS[myFlightRank]&&React.createElement("div",{style:{background:C.greenDark,borderRadius:8,padding:"8px 16px",minWidth:72,textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:22,fontWeight:700,color:"#fff"}},"$"+PAYOUTS[myFlightRank]),
+              React.createElement("div",{style:{fontSize:10,color:C.gray,marginTop:2}},"Prize")
+            ),
+            myTally[curTeam.id]>0&&React.createElement("div",{style:{background:"#2d1f00",border:"1px solid "+C.gold,borderRadius:8,padding:"8px 16px",minWidth:72,textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:22,fontWeight:700,color:C.gold}},"$"+(myTally[curTeam.id]*mySkinVal).toFixed(0)),
+              React.createElement("div",{style:{fontSize:10,color:C.gray,marginTop:2}},myTally[curTeam.id]+" Skin"+(myTally[curTeam.id]!==1?"s":""))
+            )
+          )
+        ),
+        React.createElement("div",{style:{display:"flex",gap:5,marginBottom:10}},
+          FLIGHT_NAMES.map(f=>React.createElement("button",{key:f,onClick:()=>setSelFlight(f),style:{flex:1,background:selFlight===f?C.greenDark:C.navyMid,color:"#fff",border:"none",borderRadius:7,padding:"9px 4px",fontSize:13,fontWeight:selFlight===f?700:400,cursor:"pointer",position:"relative"}},f,
+            myFlight===f&&React.createElement("span",{style:{position:"absolute",top:3,right:4,width:6,height:6,borderRadius:"50%",background:C.green,display:"block"}})
+          ))
+        ),
+        getFlightTeams(selFlight).map((t,i)=>{
+          const rank=i+1,payout=PAYOUTS[rank],isMe=t.id===curId;
+          const {tally:sft}=computeSkins(getFlightTeams(selFlight));
+          const ts=sft[t.id]||0;
+          return React.createElement("div",{key:t.id,style:{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",background:isMe?"#0a2218":rank<=3?"#0e2018":C.navyMid,borderRadius:10,marginBottom:6,border:"2px solid "+(isMe?C.green:rank===1?"#2d5a27":C.navyLight)}},
+            React.createElement("div",{style:{width:28,height:28,flexShrink:0,background:rank<=3?medals[rank-1]:C.navyLight,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:rank===1?"#111":"#fff"}},rank<=3?["1","2","3"][rank-1]:rank),
+            React.createElement("div",{style:{flex:1,minWidth:0}},
+              React.createElement("div",{style:{display:"flex",alignItems:"center",gap:6}},
+                React.createElement("span",{style:{fontWeight:700,fontSize:14}},t.name),
+                isMe&&React.createElement("span",{style:{fontSize:9,background:C.green,color:C.navy,borderRadius:4,padding:"1px 5px",fontWeight:700}},"You")
+              ),
+              React.createElement("div",{style:{display:"flex",gap:8,marginTop:2}},
+                payout&&React.createElement("span",{style:{fontSize:10,color:C.gold,fontWeight:700}},"$"+payout),
+                ts>0&&React.createElement("span",{style:{fontSize:10,color:C.gold}},ts+" skin"+(ts!==1?"s":""))
+              )
+            ),
+            React.createElement("div",{style:{textAlign:"right",flexShrink:0}},
+              React.createElement("div",{style:{fontWeight:700,fontSize:20,color:C.green}},totalScore(t.scores)),
+              React.createElement("div",{style:{fontSize:12,color:C.gray}},relToPar(t.scores))
+            )
+          );
+        })
+      );
+    }
+
+    function SkinsTab(){
+      if(!roundEnded)return React.createElement(LockedScreen,{label:"Skins"});
+      const ft=getFlightTeams(selFlight);
+      if(!ft.length)return React.createElement("div",{style:{padding:"32px",textAlign:"center",color:C.gray}},"No scores in Flight "+selFlight);
+      const {skinWinners:sw,tally:st}=computeSkins(ft);
+      const ts=Object.values(st).reduce((a,v)=>a+v,0);
+      const sv=ts>0?(SKINS_POT/ts):0;
+      return React.createElement("div",{style:{padding:"12px 16px 0",paddingBottom:20}},
+        React.createElement("div",{style:{display:"flex",gap:5,marginBottom:12}},
+          FLIGHT_NAMES.map(f=>React.createElement("button",{key:f,onClick:()=>setSelFlight(f),style:{flex:1,background:selFlight===f?C.greenDark:C.navyMid,color:"#fff",border:"none",borderRadius:7,padding:"9px 4px",fontSize:13,fontWeight:selFlight===f?700:400,cursor:"pointer"}},f))
+        ),
+        React.createElement("div",{style:{background:"#0e2a18",border:"1px solid "+C.greenDark,borderRadius:9,padding:"12px 14px",marginBottom:12}},
+          React.createElement("div",{style:{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:2,marginBottom:8}},"Flight "+selFlight+" Skins"),
+          React.createElement("div",{style:{fontSize:11,color:C.gray,marginBottom:10}},"$"+SKINS_POT+" pot - "+ts+" skin"+(ts!==1?"s":"")+" won"+(ts>0?" - $"+sv.toFixed(0)+"/skin":"")),
+          ft.filter(t=>st[t.id]>0).sort((a,b)=>st[b.id]-st[a.id]).map(t=>
+            React.createElement("div",{key:t.id,style:{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid "+C.navyLight,fontSize:13}},
+              React.createElement("span",{style:{color:t.id===curId?C.green:C.offWhite,fontWeight:600}},t.name+(t.id===curId?" (You)":"")),
+              React.createElement("span",{style:{color:C.gold,fontWeight:700}},st[t.id]+" skin"+(st[t.id]!==1?"s":"")+" - $"+(st[t.id]*sv).toFixed(0))
+            )
+          ),
+          ft.every(t=>!st[t.id])&&React.createElement("div",{style:{color:C.gray,fontSize:12}},"No skins decided yet.")
+        ),
+        COURSE.map(({hole,par})=>{
+          const s=sw[hole],winner=s&&s.teamId?ft.find(t=>t.id===s.teamId):null,isMe=winner&&winner.id===curId,ws=winner?winner.scores[hole]:null;
+          return React.createElement("div",{key:hole,style:{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:isMe?"#0a2218":winner?"#0e1f10":C.navyMid,borderRadius:8,marginBottom:4,border:"1px solid "+(isMe?C.green:winner?C.greenDark:C.navyLight)}},
+            React.createElement("div",{style:{width:38,fontSize:11,color:C.gray,fontWeight:700,flexShrink:0}},"H"+hole,React.createElement("div",{style:{fontSize:9,color:C.grayDark}},"P"+par)),
+            React.createElement("div",{style:{flex:1,fontSize:12}},
+              winner?React.createElement("span",{style:{color:isMe?C.green:C.gold,fontWeight:700}},
+                "Winner: "+winner.name+(isMe?" (You)":"")+" - "+scoreLabel(ws,par)+" - "+s.skins+" skin"+(s.skins!==1?"s":"")+" - $"+(s.skins*sv).toFixed(0)
+              ):s&&s.carryover?React.createElement("span",{style:{color:C.orange}},"Tie - carries over"):React.createElement("span",{style:{color:C.grayDark}},"—")
+            )
+          );
+        })
+      );
+    }
+
+    function ContestsTab(){
+      if(!roundEnded)return React.createElement(LockedScreen,{label:"Contests"});
+      const hasAny=Object.keys(contests).length>0;
+      return React.createElement("div",{style:{padding:"12px 16px 0",paddingBottom:20}},
+        !hasAny&&React.createElement("div",{style:{padding:"32px",textAlign:"center",color:C.gray}},"Contest winners haven't been entered yet."),
+        CONTESTS.map(({id,label,icon,note})=>{
+          const result=contests[id];
+          if(!result)return null;
+          return React.createElement("div",{key:id,style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:"#0e2018",borderRadius:12,marginBottom:10,border:"1px solid "+C.greenDark}},
+            React.createElement("div",{style:{flex:1}},
+              React.createElement("div",{style:{fontSize:10,color:C.gray,textTransform:"uppercase",letterSpacing:1,marginBottom:3}},label),
+              React.createElement("div",{style:{fontWeight:700,fontSize:16,color:C.white}},"Winner: "+result.winner),
+              React.createElement("div",{style:{fontSize:10,color:C.grayDark,marginTop:3}},note)
+            )
+          );
+        })
+      );
+    }
+
+    function FieldTab(){
+      if(!allSubmitted)return React.createElement(LockedScreen,{label:"Field"});
+      const submitted=teams.filter(t=>t.submitted&&Object.keys(t.scores).length===18);
+      const sorted=[...submitted].sort((a,b)=>totalScore(a.scores)-totalScore(b.scores));
+      return React.createElement("div",{style:{paddingBottom:24}},
+        React.createElement("div",{style:{fontSize:11,color:C.gray,padding:"12px 16px 6px"}},submitted.length+" of "+teams.length+" scorecards submitted"),
+        sorted.map((t,i)=>{
+          const isMe=t.id===curId,fm=flightMap[t.id];
+          return React.createElement("div",{key:t.id,style:{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",background:isMe?"#0a2218":i%2===0?C.navy:C.navyMid,borderBottom:"1px solid "+C.navyLight}},
+            React.createElement("div",{style:{width:22,textAlign:"center",fontSize:11,color:C.grayDark,fontWeight:700}},i+1),
+            React.createElement("div",{style:{flex:1}},
+              React.createElement("div",{style:{fontWeight:isMe?700:500,fontSize:13,color:isMe?C.green:"#fff"}},t.name+(isMe?" ★":"")),
+              fm&&React.createElement("div",{style:{fontSize:9,color:C.gold}},"Flight "+fm.flight+" #"+fm.flightRank)
+            ),
+            React.createElement("div",{style:{textAlign:"right"}},
+              React.createElement("div",{style:{fontWeight:700,color:C.green,fontSize:15}},totalScore(t.scores)),
+              React.createElement("div",{style:{fontSize:11,color:C.gray}},relToPar(t.scores))
+            )
+          );
+        })
+      );
+    }
+
+    return React.createElement("div",{style:{minHeight:"100vh",background:C.navy,color:C.white,paddingBottom:48}},
+      React.createElement(Header,{sub:curTeam.name}),
+      tabBar,
+      playerTab==="scorecard"&&React.createElement(ScorecardTab,null),
+      playerTab==="results"&&React.createElement(ResultsTab,null),
+      playerTab==="skins"&&React.createElement(SkinsTab,null),
+      playerTab==="contests"&&React.createElement(ContestsTab,null),
+      playerTab==="field"&&React.createElement(FieldTab,null),
+      toast&&React.createElement(Toast,toast)
+    );
+  }
+
+  // ADMIN VIEW
+  if(view==="admin"){
+    const ATABS=["teams","results","skins","contests","settings"];
+    const submitted=teams.filter(t=>t.submitted).length;
+
+    function TeamsTab(){
+      return React.createElement("div",{style:{padding:"12px 16px"}},
+        React.createElement("div",{style:{display:"flex",gap:6,marginBottom:14}},
+          [["Teams",teams.length],["Submitted",submitted],["Remaining",teams.length-submitted]].map(([l,v])=>
+            React.createElement("div",{key:l,style:{flex:1,background:C.navyMid,border:"1px solid "+C.navyLight,borderRadius:9,padding:"9px 4px",textAlign:"center"}},
+              React.createElement("div",{style:{fontSize:20,fontWeight:700,color:C.green}},v),
+              React.createElement("div",{style:{fontSize:9,color:C.gray,textTransform:"uppercase",letterSpacing:1}},l)
+            )
+          )
+        ),
+        React.createElement("div",{style:{...cardSt,marginBottom:14,padding:12}},
+          React.createElement("div",{style:{fontSize:11,color:C.gray,marginBottom:8}},"Add new team:"),
+          React.createElement("input",{style:{...inp,marginBottom:8},placeholder:"Team name",value:addName,onChange:e=>{setAddName(e.target.value);setAddCode(generateCode(e.target.value,teams.length));}}),
+          React.createElement("input",{style:{...inp,letterSpacing:3,fontFamily:"monospace",textTransform:"uppercase",marginBottom:8},placeholder:"Code (auto)",value:addCode,onChange:e=>setAddCode(e.target.value.toUpperCase()),maxLength:8}),
+          React.createElement("button",{style:btn(C.greenDark,"#fff",0),onClick:()=>{
+            const name=addName.trim();
+            if(!name){showToast("Enter a team name","error");return;}
+            const code=addCode.trim().toUpperCase()||generateCode(name,teams.length);
+            if(teams.find(t=>t.code===code)){showToast("Code already in use","error");return;}
+            const t={id:"T"+(UID++),name,code,scores:{},submitted:false};
+            sset(SK_UID,UID);
+            setTeams(prev=>[...prev,t]);setAddName("");setAddCode("");showToast(name+" added");
+          }},"Add Team")
+        ),
+        teams.map((t,i)=>{
+          const isEditing=editingTeamId===t.id,isConfirm=confirmDelete===t.id,isOverride=overrideTeamId===t.id;
+          const entered=Object.keys(t.scores).length,fm=flightMap[t.id];
+          return React.createElement("div",{key:t.id,style:{...cardSt,margin:"0 0 10px",padding:0,overflow:"hidden"}},
+            React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,padding:"12px 14px"}},
+              React.createElement("div",{style:{width:24,height:24,background:C.navyLight,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:C.gray,flexShrink:0}},i+1),
+              React.createElement("div",{style:{flex:1,minWidth:0}},
+                React.createElement("div",{style:{fontWeight:700,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.name),
+                React.createElement("div",{style:{fontSize:11,fontFamily:"monospace",color:C.gray}},t.code,t.submitted&&React.createElement("span",{style:{color:C.greenDim,marginLeft:8}},"Submitted"),!t.submitted&&entered>0&&React.createElement("span",{style:{color:"#f59e0b",marginLeft:8}},entered+"/18")),
+                fm&&React.createElement("div",{style:{fontSize:10,color:C.gold,fontWeight:700}},"Flight "+fm.flight+" #"+fm.flightRank)
+              ),
+              t.submitted&&React.createElement("div",{style:{textAlign:"right",flexShrink:0}},
+                React.createElement("div",{style:{fontWeight:700,color:C.green,fontSize:16}},totalScore(t.scores)),
+                React.createElement("div",{style:{fontSize:11,color:C.gray}},relToPar(t.scores))
+              ),
+              !isEditing&&!isConfirm&&!isOverride&&React.createElement("div",{style:{display:"flex",gap:6,flexShrink:0}},
+                t.submitted?
+                  React.createElement("button",{onClick:()=>{setOverrideTeamId(t.id);setOverrideScores({...t.scores});setOverrideHole(null);setEditingTeamId(null);setConfirmDelete(null);},style:{background:"#1a3a1a",color:C.green,border:"1px solid "+C.greenDark,borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}},"Edit Scores"):
+                  React.createElement("button",{onClick:()=>{setEditingTeamId(t.id);setEditName(t.name);setEditCode(t.code);},style:{background:C.navyLight,color:"#fff",border:"none",borderRadius:6,padding:"6px 11px",cursor:"pointer",fontSize:12,fontWeight:600}},"Edit"),
+                React.createElement("button",{onClick:()=>{setConfirmDelete(t.id);setEditingTeamId(null);setOverrideTeamId(null);},style:{background:"#3b1010",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:13}},"X")
+              )
+            ),
+            isEditing&&React.createElement("div",{style:{padding:"12px 14px",background:"#0e2a18"}},
+              React.createElement("input",{style:{...inp,marginBottom:8},value:editName,onChange:e=>setEditName(e.target.value)}),
+              React.createElement("input",{style:{...inp,letterSpacing:3,fontFamily:"monospace",textTransform:"uppercase",marginBottom:8},value:editCode,onChange:e=>setEditCode(e.target.value.toUpperCase()),maxLength:8}),
+              React.createElement("div",{style:{display:"flex",gap:8}},
+                React.createElement("button",{onClick:()=>{
+                  const name=editName.trim(),code=editCode.trim().toUpperCase();
+                  if(!name||!code){showToast("Required","error");return;}
+                  if(teams.find(t=>t.code===code&&t.id!==editingTeamId)){showToast("Code in use","error");return;}
+                  setTeams(prev=>prev.map(t=>t.id===editingTeamId?{...t,name,code}:t));
+                  setEditingTeamId(null);showToast("Updated");
+                },style:{flex:1,background:C.greenDark,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,fontWeight:700,cursor:"pointer"}},"Save"),
+                React.createElement("button",{onClick:()=>setEditingTeamId(null),style:{flex:1,background:C.navyLight,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,cursor:"pointer"}},"Cancel")
+              )
+            ),
+            isConfirm&&React.createElement("div",{style:{padding:"12px 14px",background:"#1c0808",borderTop:"1px solid #7f1d1d"}},
+              React.createElement("div",{style:{fontSize:13,color:"#f87171",marginBottom:10,textAlign:"center"}},"Remove "+t.name+"?"),
+              React.createElement("div",{style:{display:"flex",gap:8}},
+                React.createElement("button",{onClick:()=>{setTeams(prev=>prev.filter(x=>x.id!==t.id));setConfirmDelete(null);showToast("Removed");},style:{flex:1,background:C.red,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,fontWeight:700,cursor:"pointer"}},"Yes, Remove"),
+                React.createElement("button",{onClick:()=>setConfirmDelete(null),style:{flex:1,background:C.navyLight,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,cursor:"pointer"}},"Cancel")
+              )
+            ),
+            isOverride&&React.createElement("div",{style:{padding:"14px",background:"#0a1a0a",borderTop:"1px solid "+C.greenDark}},
+              React.createElement("div",{style:{fontSize:11,color:"#fbbf24",fontWeight:700,marginBottom:8}},"Admin Score Override - "+t.name),
+              COURSE.map(({hole,par,hcp})=>{
+                const current=overrideScores[hole],isEditingThis=overrideHole===hole;
+                return React.createElement("div",{key:hole,style:{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:"1px solid "+C.navyLight}},
+                  React.createElement("div",{style:{minWidth:80,fontSize:12}},"Hole "+hole+" P"+par),
+                  isEditingThis?
+                    React.createElement("div",{style:{display:"flex",gap:4,alignItems:"center"}},
+                      React.createElement("input",{autoFocus:true,type:"number",min:1,max:15,style:{...inp,width:52,padding:"4px 6px",textAlign:"center",fontSize:14},value:overrideVal,onChange:e=>setOverrideVal(e.target.value),onKeyDown:e=>{if(e.key==="Enter"){const s=parseInt(overrideVal);if(s>=1&&s<=15){setOverrideScores(prev=>({...prev,[hole]:s}));setOverrideHole(null);}else showToast("1-15","error");}}}),
+                      React.createElement("button",{onClick:()=>{const s=parseInt(overrideVal);if(s>=1&&s<=15){setOverrideScores(prev=>({...prev,[hole]:s}));setOverrideHole(null);}},style:{background:C.greenDark,color:"#fff",border:"none",borderRadius:5,padding:"4px 8px",cursor:"pointer"}},"OK"),
+                      React.createElement("button",{onClick:()=>setOverrideHole(null),style:{background:C.navyLight,color:"#fff",border:"none",borderRadius:5,padding:"4px 8px",cursor:"pointer"}},"X")
+                    ):
+                    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
+                      React.createElement("span",{style:{fontWeight:700,color:current?C.green:C.grayDark}},current||"—"),
+                      React.createElement("button",{onClick:()=>{setOverrideHole(hole);setOverrideVal(current||"");},style:{background:C.navyLight,color:"#fff",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11}},current?"Edit":"Enter")
+                    )
+                );
+              }),
+              React.createElement("div",{style:{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:13}},"New total: ",React.createElement("span",{style:{fontWeight:700,color:C.green}},totalScore(overrideScores)||"—")),
+              React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},
+                React.createElement("button",{onClick:saveOverride,style:{flex:1,background:C.greenDark,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,fontWeight:700,cursor:"pointer"}},"Save Override"),
+                React.createElement("button",{onClick:()=>{setOverrideTeamId(null);setOverrideHole(null);},style:{flex:1,background:C.navyLight,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,cursor:"pointer"}},"Cancel")
+              )
+            )
+          );
+        })
+      );
+    }
+
+    function AdminResultsTab(){
+      return React.createElement("div",{style:{padding:"12px 16px"}},
+        !roundEnded&&React.createElement("div",{style:{background:"#1c1500",border:"1px solid #78350f",borderRadius:9,padding:12,marginBottom:14,fontSize:13,color:"#fbbf24"}},"Results hidden from players until you end the round. "+submitted+"/"+teams.length+" scorecards in."),
+        ranked.length===0&&React.createElement("div",{style:{color:C.gray,fontSize:13,textAlign:"center",padding:24}},"No submitted scorecards yet."),
+        ranked.length>0&&React.createElement("div",null,
+          React.createElement("div",{style:{display:"flex",gap:5,marginBottom:14}},
+            FLIGHT_NAMES.map(f=>React.createElement("button",{key:f,onClick:()=>setSelFlight(f),style:{flex:1,background:selFlight===f?C.greenDark:C.navyMid,color:"#fff",border:"none",borderRadius:7,padding:"9px 4px",fontSize:13,fontWeight:selFlight===f?700:400,cursor:"pointer"}},f))
+          ),
+          getFlightTeams(selFlight).map((t,i)=>{
+            const rank=i+1,payout=PAYOUTS[rank];
+            return React.createElement("div",{key:t.id,style:{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",background:rank<=3?"#0e2a18":C.navyMid,borderRadius:9,marginBottom:6,border:"1px solid "+(rank===1?C.green:C.navyLight)}},
+              React.createElement("div",{style:{width:28,height:28,background:rank<=3?[C.gold,"#9ca3af","#b87333"][rank-1]:C.navyLight,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:rank===1?"#111":"#fff",flexShrink:0}},rank),
+              React.createElement("div",{style:{flex:1}},
+                React.createElement("div",{style:{fontWeight:700,fontSize:14}},t.name),
+                React.createElement("div",{style:{fontSize:10,color:C.gray}},"Overall #"+(ranked.indexOf(t)+1),payout&&React.createElement("span",{style:{color:C.gold,marginLeft:8}},"wins $"+payout))
+              ),
+              React.createElement("div",{style:{textAlign:"right"}},
+                React.createElement("div",{style:{fontWeight:700,fontSize:20,color:C.green}},totalScore(t.scores)),
+                React.createElement("div",{style:{fontSize:12,color:C.gray}},relToPar(t.scores))
+              )
+            );
+          })
+        )
+      );
+    }
+
+    function AdminSkinsTab(){
+      const ft=getFlightTeams(selFlight);
+      const {skinWinners,tally}=ft.length?computeSkins(ft):{skinWinners:{},tally:{}};
+      const totalSkins=Object.values(tally).reduce((a,v)=>a+v,0);
+      const skinVal=totalSkins>0?(SKINS_POT/totalSkins):0;
+      return React.createElement("div",{style:{padding:"12px 16px"}},
+        React.createElement("div",{style:{display:"flex",gap:5,marginBottom:14}},
+          FLIGHT_NAMES.map(f=>React.createElement("button",{key:f,onClick:()=>setSelFlight(f),style:{flex:1,background:selFlight===f?C.greenDark:C.navyMid,color:"#fff",border:"none",borderRadius:7,padding:"9px 4px",fontSize:13,fontWeight:selFlight===f?700:400,cursor:"pointer"}},f))
+        ),
+        !ft.length?React.createElement("div",{style:{color:C.gray,fontSize:13,padding:12}},"No submitted scores in Flight "+selFlight+" yet."):
+        React.createElement("div",null,
+          React.createElement("div",{style:{background:"#0e2a18",border:"1px solid "+C.greenDark,borderRadius:9,padding:"12px 14px",marginBottom:12}},
+            React.createElement("div",{style:{fontSize:11,color:C.green,textTransform:"uppercase",letterSpacing:2,marginBottom:8}},"Flight "+selFlight+" Skins"),
+            React.createElement("div",{style:{fontSize:11,color:C.gray,marginBottom:10}},"$"+SKINS_POT+" pot - "+totalSkins+" skins won"+(totalSkins>0?" - $"+skinVal.toFixed(0)+"/skin":"")),
+            ft.filter(t=>tally[t.id]>0).sort((a,b)=>tally[b.id]-tally[a.id]).map(t=>
+              React.createElement("div",{key:t.id,style:{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid "+C.navyLight,fontSize:13}},
+                React.createElement("span",{style:{color:C.offWhite,fontWeight:600}},t.name),
+                React.createElement("span",{style:{color:C.gold,fontWeight:700}},tally[t.id]+" skins - $"+(tally[t.id]*skinVal).toFixed(0))
+              )
+            ),
+            ft.every(t=>!tally[t.id])&&React.createElement("div",{style:{color:C.gray,fontSize:12}},"No skins decided yet.")
+          ),
+          COURSE.map(({hole,par})=>{
+            const s=skinWinners[hole],winner=s&&s.teamId?ft.find(t=>t.id===s.teamId):null,ws=winner?winner.scores[hole]:null;
+            return React.createElement("div",{key:hole,style:{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:winner?"#0e2a18":C.navyMid,borderRadius:8,marginBottom:4,border:"1px solid "+(winner?C.greenDark:C.navyLight)}},
+              React.createElement("div",{style:{width:38,fontSize:11,color:C.gray,fontWeight:700}},"H"+hole,React.createElement("div",{style:{fontSize:9,color:C.grayDark}},"P"+par)),
+              React.createElement("div",{style:{flex:1,fontSize:13}},
+                winner?React.createElement("span",{style:{color:C.gold,fontWeight:700}},"Winner: "+winner.name+" - "+scoreLabel(ws,par)+" - "+s.skins+" skins - $"+(s.skins*skinVal).toFixed(0)):
+                s&&s.carryover?React.createElement("span",{style:{color:C.orange}},"Tie - carries over"):
+                React.createElement("span",{style:{color:C.grayDark}},"No scores yet")
+              )
+            );
+          })
+        )
+      );
+    }
+
+    function AdminContestsTab(){
+      const editing=contestEditing;
+      return React.createElement("div",{style:{padding:"12px 16px"}},
+        React.createElement("div",{style:{fontSize:12,color:C.gray,marginBottom:14}},"Enter winners. Visible to players once round ends."),
+        CONTESTS.map(({id,label,icon,note})=>{
+          const result=contests[id],isEditing=editing===id;
+          return React.createElement("div",{key:id,style:{...cardSt,margin:"0 0 10px",padding:0,overflow:"hidden"}},
+            React.createElement("div",{style:{padding:"12px 14px",background:result?"#0e2a18":C.navyMid}},
+              React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+                React.createElement("div",null,
+                  React.createElement("div",{style:{fontWeight:700,fontSize:14}},label),
+                  React.createElement("div",{style:{fontSize:10,color:C.gray,marginTop:2}},note)
+                ),
+                !isEditing&&React.createElement("div",{style:{display:"flex",gap:6}},
+                  React.createElement("button",{onClick:()=>{setContestEditing(id);setContestName(result&&result.winner||"");},style:{background:result?C.navyLight:C.greenDark,color:"#fff",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}},result?"Edit":"Enter"),
+                  result&&React.createElement("button",{onClick:()=>{setContests(prev=>{const n={...prev};delete n[id];return n;});showToast("Cleared");},style:{background:"#3b1010",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:6,padding:"6px 9px",cursor:"pointer",fontSize:12}},"X")
+                )
+              ),
+              result&&!isEditing&&React.createElement("div",{style:{marginTop:8,background:"#0a1b30",borderRadius:7,padding:"8px 12px",border:"1px solid "+C.greenDark}},
+                React.createElement("div",{style:{fontWeight:700,color:C.green,fontSize:14}},"Winner: "+result.winner)
+              )
+            ),
+            isEditing&&React.createElement("div",{style:{padding:"12px 14px",background:"#0a1b30"}},
+              React.createElement("input",{style:{...inp,marginBottom:12},placeholder:"Winner name",value:contestName,onChange:e=>setContestName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveContest(id)}),
+              React.createElement("div",{style:{display:"flex",gap:8}},
+                React.createElement("button",{onClick:()=>saveContest(id),style:{flex:1,background:C.greenDark,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,fontWeight:700,cursor:"pointer"}},"Save"),
+                React.createElement("button",{onClick:()=>setContestEditing(null),style:{flex:1,background:C.navyLight,color:"#fff",border:"none",borderRadius:8,padding:"10px 0",fontSize:14,cursor:"pointer"}},"Cancel")
+              )
+            )
+          );
+        })
+      );
+    }
+
+    function AdminSettingsTab(){
+      return React.createElement("div",{style:{padding:"12px 16px"}},
+        React.createElement("div",{style:cardSt},
+          React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:6}},"Round Status"),
+          React.createElement("div",{style:{fontSize:13,color:C.gray,marginBottom:8}},roundEnded?"Round ended. Results visible to players.":"Round active. Results hidden from players."),
+          React.createElement("div",{style:{fontSize:12,color:C.gray,marginBottom:12}},submitted+"/"+teams.length+" scorecards submitted"),
+          React.createElement("button",{style:btn(roundEnded?C.navyLight:"#166534","#fff",0),onClick:()=>{setRound(r=>!r);showToast(roundEnded?"Round reopened.":"Results are now live!");}},roundEnded?"Reopen Round":"End Round & Publish Results")
+        ),
+        React.createElement("div",{style:cardSt},
+          React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:6}},"Test Mode"),
+          React.createElement("button",{style:btn("#1a3a6a","#fff",0),onClick:()=>{
+            const ws=teams.map((t,i)=>({...t,scores:generateTestScores(i+1),submitted:true}));
+            setTeams(ws);setRound(true);
+            setContests({ld:{winner:"Matt Simpson"},ctp4:{winner:"Drew Quinones"},ctp8:{winner:"Kyle Orf"},ctp13:{winner:"Erika Martin"},ctp15:{winner:"Julie Quinones"},c2h9:{winner:"Scott Mandziara"}});
+            showToast("Test scores loaded");
+          }},"Load Test Scores")
+        ),
+        React.createElement("div",{style:cardSt},
+          React.createElement("div",{style:{fontWeight:700,fontSize:15,marginBottom:6}},"Reset Tournament"),
+          React.createElement("button",{style:btn(C.red,"#fff",0),onClick:()=>{
+            if(window.confirm("Delete ALL teams and scores?")){
+              const fresh=buildDefaultTeams();
+              setTeams(fresh);setRound(false);setContests({});
+              sset(SK_TEAMS,fresh);sset(SK_ROUND,false);sset(SK_CONTESTS,{});
+              showToast("Cleared.");
+            }
+          }},"Clear All Tournament Data"),
+          React.createElement("button",{style:btn(C.navyLight,"#fff",8),onClick:()=>{sset(SK_SESSION,null);setView("login");setCode("");}},"Log Out")
+        )
+      );
+    }
+
+    return React.createElement("div",{style:{minHeight:"100vh",background:C.navy,color:C.white,paddingBottom:48}},
+      React.createElement(Header,{sub:"Staff Portal"}),
+      React.createElement("div",{style:{display:"flex",gap:5,padding:"12px 16px 0"}},
+        ATABS.map(t=>React.createElement("button",{key:t,onClick:()=>setAdminTab(t),style:{flex:1,background:adminTab===t?C.greenDark:C.navyMid,color:"#fff",border:"none",borderRadius:7,padding:"9px 4px",fontSize:12,fontWeight:adminTab===t?700:400,cursor:"pointer"}},t.charAt(0).toUpperCase()+t.slice(1)))
+      ),
+      adminTab==="teams"&&React.createElement(TeamsTab,null),
+      adminTab==="results"&&React.createElement(AdminResultsTab,null),
+      adminTab==="skins"&&React.createElement(AdminSkinsTab,null),
+      adminTab==="contests"&&React.createElement(AdminContestsTab,null),
+      adminTab==="settings"&&React.createElement(AdminSettingsTab,null),
+      toast&&React.createElement(Toast,toast)
+    );
+  }
+
+  return React.createElement("div",{style:{color:"#fff",padding:20}},"Loading...");
+}
+
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App,null));
+</script>
+</body>
 </html>
