@@ -8,9 +8,10 @@ const firebaseConfig = {
   authDomain: "andy-quinones-tournament.firebaseapp.com",
   databaseURL: "https://andy-quinones-tournament-default-rtdb.firebaseio.com",
   projectId: "andy-quinones-tournament",
-  storageBucket: "andy-quinones-tournament.appspot.com",
-  messagingSenderId: "1234567890",
-  appId: "1:1234567890:web:abc123"
+  storageBucket: "andy-quinones-tournament.firebasestorage.app",
+  messagingSenderId: "598752223096",
+  appId: "1:598752223096:web:eda06d0ef069cb75b5328d",
+  measurementId: "G-M2L7H4HJXR"
 };
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
